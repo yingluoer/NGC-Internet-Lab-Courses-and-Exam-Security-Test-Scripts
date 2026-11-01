@@ -84,8 +84,11 @@ jobs:
           echo "=== spec 内容 ==="
           cat SafetyTerminal_mac.spec
           echo "=== PyInstaller 打包 ==="
-          python -m PyInstaller --clean --noconfirm SafetyTerminal_mac.spec 2>&1 | tail -40
+          set -o pipefail
+          python -m PyInstaller --clean --noconfirm SafetyTerminal_mac.spec 2>&1 | tail -60
+          echo "=== dist 目录 ==="
           ls -la dist/
+          find dist -type f 2>/dev/null || true
 
       - name: 上传产物
         uses: actions/upload-artifact@v4
