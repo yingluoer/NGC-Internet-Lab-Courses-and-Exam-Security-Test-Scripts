@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>LAB SAFETY · TERMINAL v2.4.0</title>
+<title>南京工程学院互联网+实验室课程及考试安全测试程序</title>
 <style>
 :root{
   --ylw:#F2F23C;      /* 终端黄（收敛一点，只用于强调） */
@@ -50,7 +50,7 @@ header{display:flex;align-items:flex-end;justify-content:space-between;
   clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);}
 .mark::before{background:var(--ylw);opacity:.85}
 .mark::after{inset:6px;background:var(--bg);}
-.title{font-size:16px;letter-spacing:.02em;color:var(--ylw);font-weight:700}
+.title{font-size:13px;letter-spacing:.01em;color:var(--ylw);font-weight:700;line-height:1.3}
 .sub{font-size:11.5px;letter-spacing:.02em;color:var(--dim);margin-top:3px}
 .hstat{display:flex;align-items:center;gap:18px;font-size:12px;letter-spacing:.02em}
 .dot{width:6px;height:6px;border-radius:50%;display:inline-block;margin-right:7px;
@@ -229,8 +229,8 @@ label.fl{display:block;font-size:11.5px;letter-spacing:.02em;color:var(--dim);ma
     <div class="brand">
       <div class="mark"></div>
       <div>
-        <div class="title">LAB SAFETY TERMINAL <span style="font-size:11px;color:var(--dim);font-weight:400;letter-spacing:.04em">v2.4.0</span></div>
-        <div class="sub">南京工程学院 · 实验室安全育人智慧学习系统</div>
+        <div class="title">南京工程学院互联网+实验室课程及考试安全测试程序</div>
+        <div class="sub">LAB SAFETY TERMINAL · 实验室安全育人智慧学习系统</div>
       </div>
     </div>
     <div class="hstat">
@@ -689,7 +689,21 @@ pollLogs(); pollState(); loadCourses();
         <li>浏览器：界面强制用 Edge / Chrome 打开，找不到则用内置 Chromium，避开 360 / QQ 默认浏览器打不开的问题。</li>
         <li>防误杀：去掉 UPX 压缩、补充版本信息、增加自签名。</li>
         <li>开考规则：课程学习进度 ≥ 90% 才可开考，视频答题正确率不影响开考。</li>
-        <li>macOS：代码已做跨平台适配，但未在 Mac 实测、未打包。</li>
+        <li>macOS：已出 mac 版（登录用本机 Chrome / Edge）。</li>
+      </ul>
+    </div>
+    <div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
+      <h4 style="font-size:13px;color:var(--ylw);letter-spacing:.06em;margin-bottom:8px">◈ 功能说明</h4>
+      <ul style="padding-left:18px;color:var(--txt);font-size:12.5px;line-height:1.9">
+        <li><b>执行学习</b>：自动刷课程视频 + 视频弹题。视频刷到 100% 完成，已完成的自动跳过，可反复运行。</li>
+        <li><b>正式考试</b>：进入实验室安全准入考试（需先签字）。考试拟真模式下故意错几题，分数落在 90~100 及格线。</li>
+        <li><b>实名签署</b>：打开平台《考生承诺书》+ 手写签名页，由本人手写签名。</li>
+        <li><b>全真模考</b>：本地组卷模拟（50 题 / 30 分钟 / 90 分及格），练手感，不写入平台。</li>
+        <li><b>一键全流程</b>：题库导出 → 执行学习 → 正式考试 → 下载证书，一条龙。</li>
+        <li><b>下载证书</b>：把考试通过后的合格证书下载到本地。</li>
+        <li><b>秒刷 / 拟真模式</b>：秒刷最快（约 10 秒刷完全部）；拟真按真实节奏分段上报进度。</li>
+        <li><b>视频拟真答题</b>：视频弹题随机错 1~5 题（更自然）；不勾则全部正确。</li>
+        <li><b>考试拟真答题</b>：正式考试故意错几题（分数 90~100）；不勾则全对满分。</li>
       </ul>
     </div>
     <div class="donate">
