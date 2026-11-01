@@ -74,7 +74,7 @@ jobs:
           spec += "    hiddenimports=['nk_auto','question_bank','feature_flags','flask','Crypto.Cipher.AES','Crypto.Util.Padding','ddddocr','onnxruntime','playwright','PIL'],\n"
           spec += "    excludes=['pytest','unittest','doctest'],\n)\n"
           spec += "pyz = PYZ(a.pure, a.zipped_data)\n"
-          spec += "exe = EXE(pyz, a.scripts, a.binaries, a.zipfiles, a.datas, [], name='SafetyTerminal-mac', debug=False, strip=False, upx=False, console=True)\n"
+          spec += "exe = EXE(pyz, a.scripts, a.binaries, a.zipfiles, a.datas, [], name='Ngc互联网+实验室课程考试单刷-mac', debug=False, strip=False, upx=False, console=True)\n"
           open('SafetyTerminal_mac.spec', 'w', encoding='utf-8').write(spec)
           print('mac spec 已生成')
           PYEOF
@@ -91,5 +91,5 @@ jobs:
       - name: 上传产物
         uses: actions/upload-artifact@v4
         with:
-          name: SafetyTerminal-mac
+          name: Ngc-mac
           path: dist/**
