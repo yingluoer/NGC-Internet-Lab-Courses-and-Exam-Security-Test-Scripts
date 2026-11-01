@@ -64,10 +64,8 @@ jobs:
               datas.append("(%r, 'ddddocr')" % DDDDOCR_DIR)
           if PLAYWRIGHT_DIR:
               datas.append("(%r, 'playwright')" % PLAYWRIGHT_DIR)
-          if chromium:
-              datas.append("(%r, 'ms-playwright/%s')" % (chromium, os.path.basename(chromium)))
-          if ffmpeg:
-              datas.append("(%r, 'ms-playwright/%s')" % (ffmpeg, os.path.basename(ffmpeg)))
+          # 不打包 chromium/ffmpeg 浏览器: mac arm64 的 dylib 无 headerpad,
+          # install_name_tool 修改 libEGL.dylib 失败。登录改用本机 Chrome/Edge。
 
           spec = "# -*- mode: python ; coding: utf-8 -*-\nimport os\n"
           spec += "a = Analysis(\n    ['server.py'],\n    pathex=[os.path.abspath('.')],\n    binaries=[],\n    datas=[\n"
