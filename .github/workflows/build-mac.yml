@@ -27,28 +27,43 @@ jobs:
 
       - name: 生成 mac 版 spec 并打包
         run: |
+          echo "=== 诊断: playwright 浏览器目录 ==="
+          ls -la ~/Library/Caches/ms-playwright/ 2>&1 || echo "ms-playwright 目录不存在"
+          echo "=== 诊断: 依赖位置 ==="
+          python -c "import ddddocr,os;print('ddddocr:',os.path.dirname(os.path.abspath(ddddocr.__file__)))" 2>&1
+          python -c "import playwright,os;print('playwright:',os.path.dirname(os.path.abspath(playwright.__file__)))" 2>&1
+          python -c "import flask;print('flask:',flask.__version__)" 2>&1
           python - << 'PYEOF'
           import os
-          import ddddocr as _ddddocr
-          import playwright as _playwright
+          DDDDOCR_DIR = None
+          try:
+              import ddddocr as _ddddocr
+              DDDDOCR_DIR = os.path.dirname(os.path.abspath(_ddddocr.__file__))
+          except Exception as e:
+              print('ddddocr import 失败:', e)
+          PLAYWRIGHT_DIR = None
+          try:
+              import playwright as _playwright
+              PLAYWRIGHT_DIR = os.path.dirname(os.path.abspath(_playwright.__file__))
+          except Exception as e:
+              print('playwright import 失败:', e)
 
-          DDDDOCR_DIR = os.path.dirname(os.path.abspath(_ddddocr.__file__))
-          PLAYWRIGHT_DIR = os.path.dirname(os.path.abspath(_playwright.__file__))
           PW = os.path.join(os.path.expanduser("~"), "Library/Caches/ms-playwright")
-
           chromium = ffmpeg = None
-          for d in sorted(os.listdir(PW)):
-              if d.startswith("chromium_headless_shell"):
-                  chromium = os.path.join(PW, d)
-              elif d.startswith("ffmpeg"):
-                  ffmpeg = os.path.join(PW, d)
+          if os.path.isdir(PW):
+              for d in sorted(os.listdir(PW)):
+                  if d.startswith("chromium"):
+                      chromium = os.path.join(PW, d)
+                  elif d.startswith("ffmpeg"):
+                      ffmpeg = os.path.join(PW, d)
+          print('chromium:', chromium)
+          print('ffmpeg:', ffmpeg)
 
-          datas = [
-              "('static', 'static')",
-              "('question_bank.json', '.')",
-              "(%r, 'ddddocr')" % DDDDOCR_DIR,
-              "(%r, 'playwright')" % PLAYWRIGHT_DIR,
-          ]
+          datas = ["('static', 'static')", "('question_bank.json', '.')"]
+          if DDDDOCR_DIR:
+              datas.append("(%r, 'ddddocr')" % DDDDOCR_DIR)
+          if PLAYWRIGHT_DIR:
+              datas.append("(%r, 'playwright')" % PLAYWRIGHT_DIR)
           if chromium:
               datas.append("(%r, 'ms-playwright/%s')" % (chromium, os.path.basename(chromium)))
           if ffmpeg:
@@ -66,7 +81,10 @@ jobs:
           print('mac spec 已生成')
           PYEOF
 
-          python -m PyInstaller --clean --noconfirm SafetyTerminal_mac.spec
+          echo "=== spec 内容 ==="
+          cat SafetyTerminal_mac.spec
+          echo "=== PyInstaller 打包 ==="
+          python -m PyInstaller --clean --noconfirm SafetyTerminal_mac.spec 2>&1 | tail -40
           ls -la dist/
 
       - name: 上传产物
