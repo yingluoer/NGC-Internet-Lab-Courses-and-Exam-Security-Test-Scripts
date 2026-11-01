@@ -430,6 +430,12 @@ def _do_exam(mode="fast", exam_real=False):
         rid, res = Examiner(api).run_formal(dry_run=False, exam_real=exam_real, mode=mode)
         if res:
             STATE["exam_score"] = res.get("score")
+            # 考试完成后自动下载证书到桌面(之前只有一键全流程才下载)
+            log("=== 考试完成, 自动下载证书 ===", "info")
+            try:
+                _do_cert_inner(api)
+            except Exception as e:
+                log("证书下载失败: %s" % e, "warn")
     except Exception as e:
         log("考试失败: %s" % e, "err")
     finally:
@@ -533,6 +539,15 @@ def _desktop_dir():
                 return v
         except Exception:
             pass
+    if sys.platform == "darwin":
+        # macOS: 标准 ~/Desktop; iCloud 桌面兜底
+        d = os.path.join(os.path.expanduser("~"), "Desktop")
+        if os.path.isdir(d):
+            return d
+        icloud = os.path.join(os.path.expanduser("~"),
+                              "Library/Mobile Documents/com~apple~CloudDocs/Desktop")
+        if os.path.isdir(icloud):
+            return icloud
     return os.path.join(os.path.expanduser("~"), "Desktop")
 
 
