@@ -500,14 +500,54 @@ def api_run():
     return jsonify({"ok": True})
 
 
+def _desktop_dir():
+    """获取真实桌面路径(支持 OneDrive/自定义位置/中文桌面), 失败兜底 ~/Desktop"""
+    if sys.platform == "win32":
+        # 1) Windows API: SHGetKnownFolderPath(FOLDERID_Desktop)
+        try:
+            import ctypes
+            from ctypes import wintypes
+            class _GUID(ctypes.Structure):
+                _fields_ = [("Data1", wintypes.DWORD), ("Data2", wintypes.WORD),
+                            ("Data3", wintypes.WORD), ("Data4", ctypes.c_ubyte * 8)]
+            fid = _GUID(0xB4BFCC3A, 0xDB2C, 0x424C,
+                        (ctypes.c_ubyte * 8)(0xB0, 0x29, 0x7F, 0xE9, 0x9A, 0x87, 0xC6, 0x41))
+            ptr = ctypes.c_wchar_p()
+            hr = ctypes.windll.shell32.SHGetKnownFolderPath(ctypes.byref(fid), 0, None, ctypes.byref(ptr))
+            if hr == 0 and ptr.value:
+                p = ptr.value
+                ctypes.windll.ole32.CoTaskMemFree(ptr)
+                if os.path.isdir(p):
+                    return p
+        except Exception:
+            pass
+        # 2) 注册表兜底
+        try:
+            import winreg
+            k = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                               r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders")
+            v, _ = winreg.QueryValueEx(k, "Desktop")
+            winreg.CloseKey(k)
+            v = os.path.expandvars(v)
+            if os.path.isdir(v):
+                return v
+        except Exception:
+            pass
+    return os.path.join(os.path.expanduser("~"), "Desktop")
+
+
 def _do_cert_inner(api):
     """下载证书到桌面"""
-    import os
     certs = api.query_certificate() or []
     if not certs:
         log("未查询到证书(考试未通过或未生成)", "warn")
         return []
-    desktop = os.path.join(os.path.expanduser("~"), "Desktop")
+    desktop = _desktop_dir()
+    if not os.path.isdir(desktop):
+        try:
+            os.makedirs(desktop, exist_ok=True)
+        except Exception:
+            desktop = os.path.expanduser("~")  # 兜底到用户目录
     saved = []
     for c in certs:
         rel = c.get("cert") or c.get("url") or c.get("fileUrl")
