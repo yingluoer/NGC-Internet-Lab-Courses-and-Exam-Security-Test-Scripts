@@ -1,0 +1,76 @@
+name: build-mac
+
+on:
+  workflow_dispatch:          # 手动触发
+  push:
+    tags:
+      - 'v*'                 # 打 tag 自动触发
+
+jobs:
+  build-mac:
+    runs-on: macos-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+          python -m playwright install chromium
+
+      - name: 生成 mac 版 spec 并打包
+        run: |
+          python - << 'PYEOF'
+          import os
+          import ddddocr as _ddddocr
+          import playwright as _playwright
+
+          DDDDOCR_DIR = os.path.dirname(os.path.abspath(_ddddocr.__file__))
+          PLAYWRIGHT_DIR = os.path.dirname(os.path.abspath(_playwright.__file__))
+          PW = os.path.join(os.path.expanduser("~"), "Library/Caches/ms-playwright")
+
+          chromium = ffmpeg = None
+          for d in sorted(os.listdir(PW)):
+              if d.startswith("chromium_headless_shell"):
+                  chromium = os.path.join(PW, d)
+              elif d.startswith("ffmpeg"):
+                  ffmpeg = os.path.join(PW, d)
+
+          datas = [
+              "('static', 'static')",
+              "('question_bank.json', '.')",
+              "(%r, 'ddddocr')" % DDDDOCR_DIR,
+              "(%r, 'playwright')" % PLAYWRIGHT_DIR,
+          ]
+          if chromium:
+              datas.append("(%r, 'ms-playwright/%s')" % (chromium, os.path.basename(chromium)))
+          if ffmpeg:
+              datas.append("(%r, 'ms-playwright/%s')" % (ffmpeg, os.path.basename(ffmpeg)))
+
+          spec = "# -*- mode: python ; coding: utf-8 -*-\nimport os\n"
+          spec += "a = Analysis(\n    ['server.py'],\n    pathex=[os.path.abspath('.')],\n    binaries=[],\n    datas=[\n"
+          spec += ",\n".join("        " + d for d in datas)
+          spec += "\n    ],\n"
+          spec += "    hiddenimports=['nk_auto','question_bank','feature_flags','flask','Crypto.Cipher.AES','Crypto.Util.Padding','ddddocr','onnxruntime','playwright','PIL'],\n"
+          spec += "    excludes=['pytest','unittest','doctest'],\n)\n"
+          spec += "pyz = PYZ(a.pure, a.zipped_data)\n"
+          spec += "exe = EXE(pyz, a.scripts, a.binaries, a.zipfiles, a.datas, [], name='SafetyTerminal-mac', debug=False, strip=False, upx=False, console=True)\n"
+          open('SafetyTerminal_mac.spec', 'w', encoding='utf-8').write(spec)
+          print('mac spec 已生成')
+          PYEOF
+
+          python -m PyInstaller --clean --noconfirm SafetyTerminal_mac.spec
+          ls -la dist/
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: SafetyTerminal-mac
+          path: dist/SafetyTerminal-mac

@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LAB SAFETY · TERMINAL v2.4.0</title>
+<style>
+:root{
+  --ylw:#F2F23C;      /* 终端黄（收敛一点，只用于强调） */
+  --grn:#4BD8A0;      /* 信号绿 */
+  --pnk:#FF6FAE;      /* 警戒粉 */
+  --bg:#0a0c09;
+  --bg2:#12150f;
+  --line:rgba(255,255,255,.10);
+  --line2:rgba(255,255,255,.055);
+  --dim:#8d948a;
+  --txt:#e6eadf;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--bg);color:var(--txt);
+  font-family:"Microsoft YaHei","微软雅黑","PingFang SC","Segoe UI",system-ui,sans-serif;
+  font-size:13.5px;line-height:1.6;overflow:hidden;
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+}
+/* 背景纹理：极淡网格，只留一点工业底纹 */
+body::before{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:
+    linear-gradient(rgba(255,255,255,.018) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,.018) 1px,transparent 1px);
+  background-size:56px 56px;
+}
+/* 扫描线大幅减弱 */
+body::after{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:1;
+  background:repeating-linear-gradient(0deg,rgba(0,0,0,.10) 0 1px,transparent 1px 4px);
+  opacity:.35;
+}
+#app{position:relative;z-index:2;height:100%;display:flex;flex-direction:column;
+     padding:14px 18px 10px;gap:10px}
+
+/* 顶栏 */
+header{display:flex;align-items:flex-end;justify-content:space-between;
+       border-bottom:1px solid var(--line);padding-bottom:10px;flex-shrink:0}
+.brand{display:flex;align-items:center;gap:12px}
+.mark{width:24px;height:24px;position:relative;flex-shrink:0}
+.mark::before,.mark::after{content:"";position:absolute;inset:0;
+  clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);}
+.mark::before{background:var(--ylw);opacity:.85}
+.mark::after{inset:6px;background:var(--bg);}
+.title{font-size:16px;letter-spacing:.02em;color:var(--ylw);font-weight:700}
+.sub{font-size:11.5px;letter-spacing:.02em;color:var(--dim);margin-top:3px}
+.hstat{display:flex;align-items:center;gap:18px;font-size:12px;letter-spacing:.02em}
+.dot{width:6px;height:6px;border-radius:50%;display:inline-block;margin-right:7px;
+     background:var(--grn);box-shadow:0 0 6px rgba(75,216,160,.7);animation:breath 2.6s infinite}
+.dot.off{background:var(--pnk);box-shadow:0 0 6px rgba(255,111,174,.7);animation:none}
+@keyframes breath{0%,100%{opacity:1}50%{opacity:.4}}
+#clock{color:var(--txt);min-width:76px;text-align:right;font-variant-numeric:tabular-nums}
+
+/* 三色条（保留符号感，但收窄） */
+.tri{display:flex;height:2px;flex-shrink:0}
+.tri i{display:block;height:100%}
+.tri i:nth-child(1){flex:1;background:var(--pnk);opacity:.75}
+.tri i:nth-child(2){flex:1;background:var(--ylw);opacity:.75}
+.tri i:nth-child(3){flex:2;background:var(--grn);opacity:.75}
+
+/* 主体 */
+main{flex:1;display:grid;grid-template-columns:290px 1fr;gap:12px;min-height:0}
+
+.panel{background:rgba(255,255,255,.022);border:1px solid var(--line);
+  position:relative;display:flex;flex-direction:column;min-height:0;border-radius:2px}
+.panel::before{content:"";position:absolute;top:-1px;left:-1px;width:14px;height:14px;
+  border-top:1.5px solid var(--ylw);border-left:1.5px solid var(--ylw);opacity:.8}
+.panel::after{content:"";position:absolute;bottom:-1px;right:-1px;width:14px;height:14px;
+  border-bottom:1.5px solid var(--ylw);border-right:1.5px solid var(--ylw);opacity:.8}
+.ph{display:flex;align-items:center;gap:9px;padding:10px 13px;
+    border-bottom:1px solid var(--line2);font-size:12px;letter-spacing:.04em;color:var(--txt)}
+.ph .n{color:var(--ylw);font-size:11px;opacity:.85}
+.pb{padding:13px;overflow:auto;flex:1;min-height:0}
+
+/* 输入 */
+label.fl{display:block;font-size:11.5px;letter-spacing:.02em;color:var(--dim);margin-bottom:7px}
+.inp{width:100%;background:#11150e;border:1px solid rgba(255,255,255,.16);color:var(--txt);
+     padding:11px 12px;font-family:inherit;font-size:15px;letter-spacing:.08em;outline:none;
+     transition:.15s;border-radius:2px}
+.inp::placeholder{color:#4a5046;letter-spacing:.08em}
+.inp:focus{border-color:var(--ylw);box-shadow:0 0 0 1px rgba(242,242,60,.35) inset}
+.btn{width:100%;margin-top:10px;padding:10px;background:transparent;cursor:pointer;
+     border:1px solid var(--line);color:var(--txt);font-family:inherit;font-size:12.5px;
+     letter-spacing:.04em;transition:.15s;position:relative;border-radius:2px}
+.btn:hover:not(:disabled){border-color:var(--ylw);color:var(--ylw);background:rgba(242,242,60,.05)}
+.btn:disabled{opacity:.3;cursor:not-allowed}
+.btn.g{border-color:rgba(75,216,160,.45);color:var(--grn)}
+.btn.g:hover:not(:disabled){background:rgba(75,216,160,.1);border-color:var(--grn)}
+.btn.y{border-color:rgba(242,242,60,.5);color:var(--ylw)}
+.btn.y:hover:not(:disabled){background:rgba(242,242,60,.1);border-color:var(--ylw)}
+.btn.p{border-color:rgba(255,111,174,.45);color:var(--pnk)}
+.btn.p:hover:not(:disabled){background:rgba(255,111,174,.1);border-color:var(--pnk)}
+
+/* 账号列表 */
+.acc{display:flex;flex-direction:column;gap:6px;margin-top:4px}
+.acc .row{display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:8px 10px;border-left:2px solid rgba(255,255,255,.12);background:rgba(255,255,255,.03);
+  cursor:pointer;transition:.12s;border-radius:2px}
+.acc .row:hover{background:rgba(255,255,255,.07);border-left-color:var(--dim)}
+.acc .row.on{border-left-color:var(--grn);background:rgba(75,216,160,.08)}
+.acc .id{font-size:13px;letter-spacing:.04em;color:var(--txt);font-variant-numeric:tabular-nums}
+.acc .nm{font-size:11.5px;color:var(--dim)}
+.acc .st{font-size:10px;color:var(--grn);letter-spacing:.06em}
+.acc .st.no{color:var(--pnk)}
+.locktxt{color:var(--pnk);font-size:12.5px;letter-spacing:.04em;padding:6px 0}
+.locktxt b{color:var(--pnk);font-weight:700;font-variant-numeric:tabular-nums}
+
+/* 右侧 */
+.right{display:flex;flex-direction:column;gap:12px;min-height:0}
+.matrix{display:grid;grid-template-columns:repeat(auto-fill,minmax(258px,1fr));gap:10px}
+.card{border:1px solid var(--line2);padding:11px 12px;background:rgba(255,255,255,.02);
+      position:relative;transition:.18s;border-radius:2px}
+.card:hover{border-color:var(--line);background:rgba(255,255,255,.045)}
+.card .cn{font-size:13px;letter-spacing:.01em;margin-bottom:9px;display:flex;
+          justify-content:space-between;align-items:center;color:var(--txt)}
+.card .cn .tag{font-size:10px;color:var(--dim);letter-spacing:.06em}
+.bar{height:3px;background:rgba(255,255,255,.08);position:relative;overflow:hidden;
+     margin-bottom:6px;border-radius:2px}
+.bar i{position:absolute;inset:0 auto 0 0;background:var(--ylw);transition:width .6s cubic-bezier(.16,1,.3,1)}
+.bar.q i{background:var(--grn)}
+.card .num{display:flex;justify-content:space-between;font-size:11px;color:var(--dim);
+           letter-spacing:.02em;font-variant-numeric:tabular-nums}
+.card.done{border-color:rgba(75,216,160,.3);background:rgba(75,216,160,.035)}
+.card.done .num{color:var(--grn)}
+.card.done .cn .tag{color:var(--grn)}
+
+.ops{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.ops .btn{margin-top:0}
+.switches{display:flex;gap:16px;align-items:center;font-size:12px;color:var(--dim);
+  letter-spacing:.04em;margin-bottom:9px;flex-wrap:wrap}
+.switches input{margin-right:5px;vertical-align:-1px;accent-color:var(--ylw)}
+.sw{display:flex;align-items:center;cursor:pointer;user-select:none}
+.sw:hover{color:var(--txt)}
+.sw:has(input:disabled){opacity:.45;cursor:not-allowed}
+.sw:has(input:disabled):hover{color:var(--dim)}
+.more{position:relative}
+.more-menu{display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:20;
+  background:var(--bg2);border:1px solid var(--line);padding:6px;border-radius:2px;
+  max-height:60vh;overflow-y:auto}
+.more-menu.show{display:flex;flex-direction:column;gap:6px}
+.more-menu .btn{margin-top:0}
+.hint{font-size:11px;color:var(--dim);margin-top:9px;line-height:1.7}
+.hint b{color:var(--ylw);font-weight:400}
+
+/* 总览 */
+.overview{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:16px;
+          border-top:1px solid var(--line2);padding-top:16px}
+.ov{border-left:2px solid rgba(255,255,255,.13);padding-left:12px}
+.ov i{display:block;font-style:normal;font-size:10.5px;letter-spacing:.08em;color:var(--dim);margin-bottom:6px}
+.ov b{font-size:27px;font-weight:700;color:var(--ylw);letter-spacing:-.01em;line-height:1;
+      font-variant-numeric:tabular-nums;transition:color .3s}
+.ov b span{font-size:12.5px;color:var(--dim);font-weight:400;margin-left:2px}
+.ov.g b{color:var(--grn)}
+.ov.p b{color:var(--pnk)}
+
+/* 日志 */
+.logwrap{flex:0 0 168px;display:flex;flex-direction:column;min-height:0}
+.log{flex:1;overflow:auto;padding:9px 13px;font-size:12px;line-height:1.85}
+.log div{white-space:pre-wrap;word-break:break-all}
+.log .t{color:#5d6359;margin-right:9px;font-variant-numeric:tabular-nums}
+.log .ok{color:var(--grn)}
+.log .err{color:var(--pnk)}
+.log .warn{color:#d9c94a}
+.log .info{color:#a8b0a2}
+
+/* 模拟测试浮层 */
+.modal{position:fixed;inset:0;background:rgba(4,6,4,.86);z-index:50;display:none;
+       align-items:center;justify-content:center;padding:24px;backdrop-filter:blur(4px)}
+.modal.on{display:flex}
+.mbox{width:min(740px,100%);max-height:88vh;background:var(--bg2);border:1px solid var(--line);
+      display:flex;flex-direction:column;position:relative;border-radius:3px;
+      box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.mbox::before{content:"";position:absolute;top:-1px;left:-1px;width:20px;height:20px;
+  border-top:2px solid var(--ylw);border-left:2px solid var(--ylw)}
+.mhd{padding:12px 16px;border-bottom:1px solid var(--line2);color:var(--ylw);
+     font-size:12.5px;letter-spacing:.06em;display:flex;justify-content:space-between}
+.mbd{padding:18px 20px;overflow:auto;flex:1}
+.qstem{font-size:14.5px;line-height:1.85;margin-bottom:16px;color:#f0f3ea}
+.opt{border:1px solid var(--line2);padding:10px 13px;margin-bottom:8px;cursor:pointer;
+     transition:.12s;letter-spacing:.01em;border-radius:2px;font-size:13.5px}
+.opt:hover{border-color:var(--line);background:rgba(255,255,255,.04)}
+.opt.sel{border-color:var(--ylw);background:rgba(242,242,60,.09);color:var(--ylw)}
+.opt b{color:var(--ylw);margin-right:10px;font-weight:600}
+.mft{padding:12px 16px;border-top:1px solid var(--line2);display:flex;
+     justify-content:space-between;align-items:center;font-size:11.5px;color:var(--dim)}
+.mft .btn{width:auto;padding:8px 18px;margin:0}
+::-webkit-scrollbar{width:7px;height:7px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.28)}
+/* 公告按钮（时间旁边） */
+.nbtn{cursor:pointer;color:var(--ylw);border:1px solid rgba(242,242,60,.45);
+  padding:2px 10px;border-radius:2px;font-size:12px;letter-spacing:.06em;
+  user-select:none;transition:background .15s,color .15s}
+.nbtn:hover{background:var(--ylw);color:var(--bg)}
+/* 公告弹窗 */
+.notice-mask{display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);
+  z-index:99;align-items:center;justify-content:center}
+.notice-mask.show{display:flex}
+.notice{width:min(420px,92vw);max-height:88vh;overflow:auto;background:var(--bg2);
+  border:1px solid var(--line);border-radius:2px;position:relative;padding:18px 20px 16px}
+.notice::before{content:"";position:absolute;top:-1px;left:-1px;width:14px;height:14px;
+  border-top:1.5px solid var(--ylw);border-left:1.5px solid var(--ylw)}
+.notice::after{content:"";position:absolute;bottom:-1px;right:-1px;width:14px;height:14px;
+  border-bottom:1.5px solid var(--ylw);border-right:1.5px solid var(--ylw)}
+.notice h3{font-size:14px;color:var(--ylw);letter-spacing:.08em;margin-bottom:12px}
+.notice ol{padding-left:18px;color:var(--txt);font-size:13px}
+.notice ol li{margin-bottom:8px}
+.notice .donate{margin-top:12px;text-align:center}
+.notice .donate img{width:200px;height:200px;border-radius:4px;border:1px solid var(--line)}
+.notice .donate p{font-size:11.5px;color:var(--dim);margin-top:6px}
+.notice .close{margin-top:14px;text-align:center}
+.notice .close button{background:none;border:1px solid rgba(242,242,60,.5);color:var(--ylw);
+  padding:6px 34px;cursor:pointer;font-size:13px;border-radius:2px;font-family:inherit}
+.notice .close button:hover{background:var(--ylw);color:var(--bg)}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="brand">
+      <div class="mark"></div>
+      <div>
+        <div class="title">LAB SAFETY TERMINAL <span style="font-size:11px;color:var(--dim);font-weight:400;letter-spacing:.04em">v2.4.0</span></div>
+        <div class="sub">南京工程学院 · 实验室安全育人智慧学习系统</div>
+      </div>
+    </div>
+    <div class="hstat">
+      <span><span class="dot" id="netdot"></span><span id="netst">ONLINE</span></span>
+      <span style="color:var(--dim)">NODE <span id="node">—</span></span>
+      <span id="btnNotice" class="nbtn">公告</span>
+      <span id="clock">--:--:--</span>
+    </div>
+  </header>
+
+  <div class="tri"><i></i><i></i><i></i></div>
+
+  <main>
+    <!-- 左：接入 -->
+    <section class="panel">
+      <div class="ph"><span class="n">01</span> 终端接入</div>
+      <div class="pb">
+        <label class="fl">学号 / STUDENT ID</label>
+        <input id="uid" class="inp" placeholder="" autocomplete="off" spellcheck="false">
+        <button class="btn y" id="btnLogin">CONNECT ▸</button>
+        <div style="margin-top:18px" id="boundBox" hidden>
+          <div class="locktxt">已锁定该账号：<b id="boundUser">—</b></div>
+        </div>
+        <div style="margin-top:18px" id="accBox">
+          <label class="fl">已保存终端</label>
+          <div class="acc" id="acclist"><div class="nm" style="padding:6px">暂无记录</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 右：进度 + 操作 -->
+    <section class="right">
+      <div class="panel" style="flex:1">
+        <div class="ph"><span class="n">02</span> 课程进度矩阵 <span id="sum" style="margin-left:auto;color:var(--dim);letter-spacing:.08em"></span></div>
+        <div class="pb"><div class="matrix" id="matrix"></div>
+          <div class="overview" id="overview"></div>
+        </div>
+      </div>
+      <div class="panel" style="flex:0 0 auto">
+        <div class="ph"><span class="n">03</span> 指令 <span id="signBadge" style="margin-left:auto;font-size:11px;color:var(--dim);letter-spacing:.04em"></span></div>
+        <div class="pb" style="padding:11px">
+          <div class="switches">
+            <label class="sw"><input type="radio" name="mode" value="fast" id="modeFast" checked> 秒刷模式</label>
+            <label class="sw"><input type="radio" name="mode" value="real" id="modeReal"> 拟真模式</label>
+            <label class="sw"><input type="checkbox" id="chkVideoReal"> 视频拟真答题</label>
+            <label class="sw"><input type="checkbox" id="chkExamReal"> 考试拟真答题</label>
+          </div>
+          <div class="ops">
+            <button class="btn y" id="btnLearn">执行学习</button>
+            <button class="btn p" id="btnFormalExam" title="需先签字">正式考试</button>
+            <button class="btn" id="btnSign">实名签署</button>
+            <button class="btn" id="btnExit" style="border-color:rgba(255,111,174,.4);color:var(--pnk)">退出程序</button>
+            <div class="more">
+              <button class="btn" id="btnMore">更多 ▾</button>
+              <div class="more-menu" id="moreMenu">
+                <button class="btn y" id="btnExam">全真模考</button>
+                <button class="btn g" id="btnRun" title="需先签字">一键全流程</button>
+                <button class="btn" id="btnCert">下载证书</button>
+              </div>
+            </div>
+          </div>
+          <div class="hint"><b>考试前必须先签字</b>。未签字时正式考试/一键全流程按钮锁定。进度在每次操作后自动同步。</div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- 日志 -->
+  <section class="panel logwrap">
+    <div class="ph"><span class="n">04</span> SYSTEM LOG <span id="busy" style="margin-left:auto;color:var(--grn);letter-spacing:.1em"></span></div>
+    <div class="log" id="log"></div>
+  </section>
+</div>
+
+<!-- 模拟测试 -->
+<div class="modal" id="modal">
+  <div class="mbox">
+    <div class="mhd"><span id="mtitle">MOCK EXAM</span><span id="mprog">--</span></div>
+    <div class="mbd" id="mbd"></div>
+    <div class="mft">
+      <span id="mhint">选择答案后下一题</span>
+      <div style="display:flex;gap:8px">
+        <button class="btn" id="mprev" style="border-color:var(--dim);color:var(--dim)">◂ PREV</button>
+        <button class="btn" id="mclose" style="border-color:var(--dim);color:var(--dim)">关闭</button>
+        <button class="btn g" id="mnext">NEXT ▸</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+let LOGN = 0, USER = null, BUSY = false, DECKS = null;
+let paper = [], idx = 0, picks = [];
+
+/* 时钟 */
+setInterval(()=>{
+  const d=new Date();
+  $('#clock').textContent = d.toTimeString().slice(0,8);
+},1000);
+
+function esc(s){return (s||'').replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}
+
+/* 日志轮询 */
+async function pollLogs(){
+  try{
+    const r = await fetch('/api/logs?since='+LOGN);
+    const d = await r.json();
+    if(d.items.length){
+      const box = $('#log');
+      d.items.forEach(it=>{
+        const el=document.createElement('div');
+        el.className=it.k;
+        el.innerHTML='<span class="t">'+it.t+'</span>'+esc(it.m);
+        box.appendChild(el);
+      });
+      box.scrollTop = box.scrollHeight;
+      LOGN = d.total;
+    }
+  }catch(e){}
+}
+
+/* 状态 */
+let LAST_BUSY=false, LAST_USER=null, SIGNED=null;
+function renderSign(signed){
+  SIGNED = signed;
+  const el = $('#signBadge');
+  if(!USER){ el.textContent=''; el.style.color='var(--dim)'; return; }
+  if(signed === true){
+    el.innerHTML='<span style="color:var(--grn)">● 已签字</span>';
+  } else if(signed === false){
+    el.innerHTML='<span style="color:var(--pnk)">● 未签字</span>';
+  } else {
+    el.innerHTML='<span style="color:var(--dim)">签字状态未知</span>';
+  }
+}
+async function pollState(){
+  try{
+    const d = await (await fetch('/api/state')).json();
+    USER = d.user; BUSY = d.busy;
+    $('#node').textContent = USER || '—';
+    $('#busy').textContent = d.busy ? '▸ ' + d.task : '';
+    $('#netdot').className = 'dot' + (USER ? '' : ' off');
+    $('#netst').textContent = USER ? 'LINKED' : 'IDLE';
+    renderSign(d.signed);
+    document.querySelectorAll('.btn').forEach(b=>{
+      if(b.id!=='mclose') b.disabled = d.busy && ['btnLogin','btnLearn','btnExport'].includes(b.id);
+    });
+    // 考试类按钮:未登录/忙碌/未签字 都禁用
+    ['btnFormalExam','btnRun'].forEach(id=>{
+      const el = document.getElementById(id);
+      if(!el) return;
+      let dis = d.busy || !USER;
+      if(d.signed === false) dis = true;   // 未签字锁定
+      el.disabled = dis;
+    });
+    // V版(一机一号): 显示固定学号, 隐藏已保存终端; Y版(多账号): 显示已保存终端
+    if(d.bind){
+      $('#boundBox').hidden = false;
+      $('#accBox').hidden = true;
+      $('#boundUser').textContent = USER || '—';
+    } else {
+      $('#boundBox').hidden = true;
+      $('#accBox').hidden = false;
+    }
+    renderAccounts(d.accounts);
+    // 任务刚结束，或账号刚变化 -> 刷新进度
+    if((LAST_BUSY && !d.busy) || (d.user && d.user !== LAST_USER)) loadCourses();
+    LAST_BUSY = d.busy; LAST_USER = d.user;
+  }catch(e){}
+}
+
+function renderAccounts(list){
+  const box = $('#acclist');
+  if(!list.length){ box.innerHTML='<div class="nm" style="padding:6px">暂无记录</div>'; return; }
+  box.innerHTML = list.map(a=>`
+    <div class="row ${a.user===USER?'on':''}" data-u="${a.user}">
+      <div><div class="id">${a.user}</div><div class="nm">${esc(a.name)||'—'}</div></div>
+      <div class="st ${a.hasToken?'':'no'}">${a.hasToken?'READY':'EXPIRED'}</div>
+    </div>`).join('');
+  box.querySelectorAll('.row').forEach(el=>{
+    el.onclick = async ()=>{
+      const r = await fetch('/api/switch',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({user:el.dataset.u})});
+      const d = await r.json();
+      if(!d.ok) alert(d.msg);
+      pollState(); loadCourses();
+    };
+  });
+}
+
+/* 进度 */
+async function loadCourses(){
+  const box = $('#matrix');
+  try{
+    const r = await fetch('/api/courses');
+    const d = await r.json();
+    if(!d.ok){ box.innerHTML = '<div class="nm" style="padding:8px;color:var(--pnk)">'+esc(d.msg)+'</div>'; return; }
+    $('#sum').textContent = `VIDEO ${d.sum.v}/${d.sum.vt} · QUIZ ${d.sum.q}/${d.sum.qt}`;
+    const pv = d.sum.vt? d.sum.v/d.sum.vt*100:0;
+    const pq = d.sum.qt? d.sum.q/d.sum.qt*100:0;
+    const zero = d.items.reduce((a,c)=>a+c.wrong,0);
+    const vOk = d.sum.vt>0 && d.sum.v >= d.sum.vt;
+    const qOk = d.sum.qt>0 && d.sum.q >= d.sum.qt;
+    const cOk = ((pv+pq)/2) >= 100;
+    $('#overview').innerHTML = `
+      <div class="ov ${vOk?'g':''}"><i>TOTAL VIDEO</i><b>${d.sum.v}<span>/${d.sum.vt}</span></b></div>
+      <div class="ov ${qOk?'g':''}"><i>TOTAL QUIZ</i><b>${d.sum.q}<span>/${d.sum.qt}</span></b></div>
+      <div class="ov ${cOk?'g':''}"><i>COMPLETION</i><b>${((pv+pq)/2).toFixed(0)}<span>%</span></b></div>
+      <div class="ov ${zero?'':'g'}"><i>MISTAKES</i><b>${zero}</b></div>`;
+    box.innerHTML = d.items.map(c=>{
+      const pv = c.vt? c.v/c.vt*100 : 0, pq = c.qt? c.q/c.qt*100 : 0;
+      const done = c.v>=c.vt && c.vt>0 && c.q>=c.qt;
+      return `<div class="card ${done?'done':''}">
+        <div class="cn"><span>${esc(c.name)}</span><span class="tag">${done?'CLEAR':'···'}</span></div>
+        <div class="bar"><i style="width:${pv}%"></i></div>
+        <div class="num"><span>VIDEO ${c.v}/${c.vt}</span><span>${pv.toFixed(0)}%</span></div>
+        <div class="bar q" style="margin-top:6px"><i style="width:${pq}%"></i></div>
+        <div class="num"><span>QUIZ ${c.q}/${c.qt}</span><span>${c.wrong?('ERR '+c.wrong):''}</span></div>
+      </div>`;
+    }).join('');
+  }catch(e){
+    box.innerHTML = '<div class="nm" style="padding:8px;color:var(--pnk)">无法读取，请先接入</div>';
+  }
+}
+
+/* 指令按钮：未用过=黄，用过=绿（状态持久化） */
+const BTN_IDS = ['btnLearn','btnExam'];
+let USED = {};
+try{ USED = JSON.parse(localStorage.getItem('sl_btn_used') || '{}'); }catch(e){ USED = {}; }
+
+function applyBtn(){
+  BTN_IDS.forEach(id=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.classList.toggle('g', !!USED[id]);
+    el.classList.toggle('y', !USED[id]);
+  });
+}
+function markUsed(id){
+  USED[id] = 1;
+  try{ localStorage.setItem('sl_btn_used', JSON.stringify(USED)); }catch(e){}
+  applyBtn();
+}
+
+/* 动作 */
+async function act(url, body){
+  // 操作前先同步一次进度 + 签字状态(登录除外, 还没登录没法同步)
+  if(url !== '/api/login'){
+    try{ await Promise.all([loadCourses(), refreshSign()]); }catch(e){}
+  }
+  const r = await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(body||{})});
+  const d = await r.json();
+  if(!d.ok){
+    if(d.need_sign){
+      alert('⚠ 未签署承诺书\n\n' + d.msg + '\n\n请点击「实名签署」完成签名后再来。');
+    } else {
+      alert(d.msg||'失败');
+    }
+  }
+  pollState();
+  // 每次操作后自动同步进度 + 签字状态（替代手动「同步进度」按钮）
+  setTimeout(()=>{ loadCourses(); refreshSign(); }, 1500);
+}
+
+$('#btnLogin').onclick = ()=>{
+  const u = $('#uid').value.trim();
+  if(!u){ $('#uid').focus(); return; }
+  $('#log').innerHTML=''; LOGN=0;
+  $('#uid').value='';              // 登录后清空，界面保持干净
+  act('/api/login',{user:u});
+};
+$('#btnLearn').onclick = ()=>{
+  const mode = $('#modeReal').checked ? 'real' : 'fast';
+  const videoReal = $('#chkVideoReal').checked;
+  if(confirm('确认执行学习？已完成项会自动跳过')){ markUsed('btnLearn'); act('/api/learn',{mode:mode, video_real:videoReal}); }
+};
+
+/* 模拟测试 / 全真模考 */
+let timerId = null, deadline = 0, examCfg = null;
+
+function stopTimer(){ if(timerId){ clearInterval(timerId); timerId = null; } }
+
+function startTimer(){
+  stopTimer();
+  deadline = Date.now() + examCfg.minutes * 60000;
+  timerId = setInterval(()=>{
+    const left = Math.max(0, deadline - Date.now());
+    const m = Math.floor(left/60000), s = Math.floor(left%60000/1000);
+    $('#mhint').textContent = `剩余 ${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')} · 及格 ${examCfg.pass} 分`;
+    if(left <= 0){ stopTimer(); submitPaper(); }
+  }, 500);
+}
+
+async function startMock(mode){
+  const r = await fetch('/api/mock',{method:'POST',headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(mode==='exam' ? {mode:'exam'} : {num:10})});
+  const d = await r.json();
+  if(!d.ok){ alert(d.msg); return; }
+  paper = d.paper; idx = 0; picks = new Array(paper.length).fill(null);
+  examCfg = (mode==='exam') ? {minutes:d.minutes, pass:d.pass, detail:d.detail} : null;
+  $('#modal').classList.add('on');
+  $('#mtitle').textContent = examCfg ? `FULL MOCK · ${paper.length}Q / ${examCfg.minutes}MIN` : 'QUICK TEST';
+  examCfg ? startTimer() : (stopTimer(), $('#mhint').textContent = '选择答案后下一题');
+  renderQ();
+}
+
+$('#btnExam').onclick = ()=>{
+  const tip = '全真模考：50 题 / 30 分钟 / 90 分及格\n按真实考试的知识点分布组卷（5 个模块各 10 题）\n\n开始吗？';
+  if(confirm(tip)){ markUsed('btnExam'); startMock('exam'); }
+};
+$('#mclose').onclick = ()=>{ stopTimer(); $('#modal').classList.remove('on'); };
+$('#mprev').onclick = ()=>{ if(idx>0){ idx--; renderQ(); } };
+
+function renderQ(){
+  const q = paper[idx];
+  $('#mprog').textContent = `${idx+1} / ${paper.length}`;
+  const opts = ['A','B','C','D'].filter(k=>q[k]).map(k=>
+    `<div class="opt ${picks[idx]&&picks[idx].includes(k)?'sel':''}" data-k="${k}"><b>${k}</b>${esc(q[k])}</div>`
+  ).join('');
+  $('#mbd').innerHTML = `<div class="qstem">${esc(q.stem)}</div>${opts}`;
+  $('#mbd').querySelectorAll('.opt').forEach(el=>{
+    el.onclick = ()=>{
+      const k = el.dataset.k;
+      if(q.kind==='3'){
+        let cur = picks[idx] ? picks[idx].split(',') : [];
+        cur = cur.includes(k) ? cur.filter(x=>x!==k) : [...cur,k].sort();
+        picks[idx] = cur.length ? cur.join(',') : null;
+      } else {
+        picks[idx] = k;
+      }
+      renderQ();
+    };
+  });
+  $('#mnext').textContent = idx===paper.length-1 ? 'SUBMIT ▸' : 'NEXT ▸';
+}
+$('#mnext').onclick = ()=>{
+  if(idx < paper.length-1){ idx++; renderQ(); return; }
+  submitPaper();
+};
+
+function submitPaper(){
+  stopTimer();
+  let right = 0; const wrong = [];
+  paper.forEach((q,i)=>{
+    const std = (q.answer||'').split(',').sort().join(',');
+    const mine = (picks[i]||'').split(',').sort().join(',');
+    if(mine && mine===std) right++; else wrong.push({q,mine,std});
+  });
+  const score = Math.round(right/paper.length*100);
+  const pass = examCfg ? examCfg.pass : 90;
+  const ok = score >= pass;
+  const col = ok ? 'var(--grn)' : 'var(--pnk)';
+  const verdict = examCfg ? (ok ? '● QUALIFIED' : '● FAILED') : (ok ? '● PASS' : '● NEEDS WORK');
+  $('#mbd').innerHTML = `
+    <div style="font-size:44px;color:${col};letter-spacing:.04em;line-height:1">${score}
+      <span style="font-size:14px;color:var(--dim)">/ 100</span></div>
+    <div style="color:${col};letter-spacing:.22em;font-size:11px;margin-top:6px">${verdict}</div>
+    <div style="color:var(--dim);margin:12px 0 18px;font-size:11px">
+      正确 ${right} / ${paper.length} · 及格线 ${pass}
+      ${examCfg ? ' · ' + examCfg.detail.map(x=>x.name+' '+x.n).join(' / ') : ''}
+    </div>
+    ${wrong.length? '<div style="color:var(--ylw);font-size:11px;letter-spacing:.16em;margin-bottom:10px">错误明细</div>' : ''}
+    ${wrong.map(w=>`<div style="margin-bottom:12px;border-left:2px solid var(--pnk);padding-left:10px">
+      <div style="margin-bottom:4px">${esc(w.q.stem)}</div>
+      <div style="font-size:11px;color:var(--dim)">你的 <span style="color:var(--pnk)">${w.mine||'未答'}</span>
+        · 正确 <span style="color:var(--grn)">${w.std}</span></div>
+    </div>`).join('')}`;
+  $('#mnext').textContent = 'CLOSE';
+  $('#mnext').onclick = ()=>{ $('#modal').classList.remove('on'); location.reload(); };
+}
+
+/* 打开平台的实名签署页，由本人在页面上手写签名 */
+$('#btnSign').onclick = ()=>{
+  if(!USER){ alert('请先登录'); return; }
+  window.open('/api/sign', '_blank');
+  // 签完回来自动查状态
+  setTimeout(refreshSign, 5000);
+  setTimeout(refreshSign, 15000);
+};
+
+async function refreshSign(){
+  if(!USER) return;
+  try{
+    const r = await fetch('/api/sign_status');
+    const d = await r.json();
+    if(d.ok){
+      renderSign(d.signed);
+      if(d.signed) pollState();   // 解锁考试按钮
+    }
+  }catch(e){}
+}
+
+/* 正式考试:未签字弹窗拦截 */
+$('#btnFormalExam').onclick = ()=>{
+  if(SIGNED === false){
+    alert('⚠ 未签署承诺书\n\n考试被锁定。\n请先点击「实名签署」完成手写签名。');
+    return;
+  }
+  if(confirm('参加正式考试?\n(开考后约 90 秒自动交卷, 需题库已采集)')){
+    const mode = $('#modeReal').checked ? 'real' : 'fast';
+    const examReal = $('#chkExamReal').checked;
+    act('/api/exam', {mode:mode, exam_real:examReal});
+  }
+};
+
+/* 一键全流程 */
+$('#btnRun').onclick = ()=>{
+  if(SIGNED === false){
+    alert('⚠ 未签署承诺书\n\n一键全流程被锁定。\n请先点击「实名签署」完成手写签名。');
+    return;
+  }
+  if(confirm('一键全流程: 题库导出 → 学习 → 考试 → 证书?\n全程约 10-15 分钟')){
+    const mode = $('#modeReal').checked ? 'real' : 'fast';
+    act('/api/run', {mode:mode, video_real:$('#chkVideoReal').checked, exam_real:$('#chkExamReal').checked});
+  }
+};
+
+/* 下载证书 */
+$('#btnCert').onclick = ()=>{ act('/api/cert'); };
+
+/* 退出程序 */
+$('#btnExit').onclick = async ()=>{
+  if(confirm('确认退出程序? 所有任务将终止')){
+    fetch('/api/exit',{method:'POST'});
+    setTimeout(()=>window.close(), 500);
+  }
+};
+
+/* 启动 */
+setInterval(pollLogs, 900);
+setInterval(pollState, 1600);
+/* 心跳：页面开着就一直续命，关掉后后端自行退出 */
+setInterval(()=>{ fetch('/api/ping').catch(()=>{}); }, 4000);
+window.addEventListener('beforeunload', ()=>{
+  try{ navigator.sendBeacon('/api/bye'); }catch(e){}
+});
+applyBtn();
+pollLogs(); pollState(); loadCourses();
+</script>
+<div class="notice-mask" id="noticeMask">
+  <div class="notice">
+    <h3>◈ 公 告 / NOTICE</h3>
+    <ol>
+      <li>本项目由璎珞开源，仅用于测试和漏洞查找，请勿用于任何非法、商业经营用途。</li>
+      <li>使用该软件造成的任何违法违规违纪，软件开发者概不负责。</li>
+      <li>如果有能力请支持一下开源。</li>
+    </ol>
+    <div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
+      <h4 style="font-size:13px;color:var(--ylw);letter-spacing:.06em;margin-bottom:8px">◈ V2.4.0 更新日志</h4>
+      <ul style="padding-left:18px;color:var(--txt);font-size:12.5px;line-height:1.8">
+        <li>界面：去掉「同步进度」按钮，改为每次操作前后自动同步进度与签字状态；「退出程序」排入主操作区。</li>
+        <li>视频答题：非拟真模式保证全部正确；视频拟真模式随机错 1~5 题。</li>
+        <li>修复：登录失败不再误报「验证码错误」，改为准确显示「账号不存在 / 密码错误」等真实原因。</li>
+        <li>浏览器：界面强制用 Edge / Chrome 打开，找不到则用内置 Chromium，避开 360 / QQ 默认浏览器打不开的问题。</li>
+        <li>防误杀：去掉 UPX 压缩、补充版本信息、增加自签名。</li>
+        <li>开考规则：课程学习进度 ≥ 90% 才可开考，视频答题正确率不影响开考。</li>
+        <li>macOS：代码已做跨平台适配，但未在 Mac 实测、未打包。</li>
+      </ul>
+    </div>
+    <div class="donate">
+      <img src="/static/donate.png" alt="赞赏码">
+      <p>↑ 赞赏码 · 帮助群众排忧解难，你无疑是高尚的</p>
+    </div>
+    <div class="close"><button id="btnNoticeClose">我知道了</button></div>
+  </div>
+</div>
+<script>
+/* 公告: 每天首次开启自动弹出, 也可点右上角「公告」按钮打开 */
+const noticeMask = $('#noticeMask');
+$('#btnNotice').addEventListener('click', ()=>noticeMask.classList.add('show'));
+$('#btnNoticeClose').addEventListener('click', ()=>{
+  noticeMask.classList.remove('show');
+  try{ localStorage.setItem('sl_notice_date', new Date().toDateString()); }catch(e){}
+});
+noticeMask.addEventListener('click', e=>{
+  if(e.target === noticeMask){
+    noticeMask.classList.remove('show');
+    try{ localStorage.setItem('sl_notice_date', new Date().toDateString()); }catch(e){}
+  }
+});
+try{
+  const today = new Date().toDateString();
+  if(localStorage.getItem('sl_notice_date') !== today){
+    noticeMask.classList.add('show');          // 每天首次开启弹出
+    localStorage.setItem('sl_notice_date', today);
+  }
+}catch(e){ noticeMask.classList.add('show'); }
+
+/* 「更多」下拉菜单 */
+$('#btnMore').onclick = (e)=>{
+  e.stopPropagation();
+  $('#moreMenu').classList.toggle('show');
+};
+document.addEventListener('click', (e)=>{
+  if(!e.target.closest('.more')) $('#moreMenu').classList.remove('show');
+});
+
+/* 拟真模式联动: 选拟真模式自动开启两个拟真答题开关并禁用(变灰) */
+function syncRealMode(){
+  const real = $('#modeReal').checked;
+  if(real){
+    $('#chkVideoReal').checked = true;
+    $('#chkExamReal').checked = true;
+  }
+  $('#chkVideoReal').disabled = real;
+  $('#chkExamReal').disabled = real;
+}
+$('#modeReal').addEventListener('change', syncRealMode);
+$('#modeFast').addEventListener('change', syncRealMode);
+syncRealMode();
+</script>
+</body>
+</html>

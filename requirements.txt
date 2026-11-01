@@ -1,0 +1,4 @@
+requests>=2.31.0
+playwright>=1.40.0
+pycryptodome>=3.19.0
+ddddocr>=1.4.11

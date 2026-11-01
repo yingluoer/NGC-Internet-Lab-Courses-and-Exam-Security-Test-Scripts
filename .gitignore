@@ -1,0 +1,24 @@
+# ==== 运行时数据（含个人账号/token，严禁上传）====
+accounts.json
+session.json
+captcha.png
+
+# ==== 敏感文档（含真实学号审计/评审记录，严禁上传）====
+DATA_AUDIT.md
+SECURITY_REVIEW.md
+
+# ==== 代码签名私钥（严禁上传）====
+*.pfx
+*.p12
+
+# ==== 打包产物 ====
+dist/
+build/
+__pycache__/
+*.pyc
+*.spec.bak
+
+# ==== 系统/编辑器 ====
+.DS_Store
+Thumbs.db
+*.log
