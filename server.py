@@ -334,7 +334,12 @@ def _do_relogin(user):
 # ---------------------------------------------------------------------------
 # 进度
 # ---------------------------------------------------------------------------
-def _api_for(user):
+def _api_for(user, strict=False):
+    """取指定账号的 Api。
+
+    strict=True 时绝不回退到全局 session token —— 批量操作必须用账号自己的 token，
+    否则会拿当前登录账号的会话去跑别人的学习/考试，等于操作错账号。
+    """
     acc = load_accounts()
     rec = acc.get(user) or {}
     if rec.get("token"):
@@ -344,6 +349,8 @@ def _api_for(user):
             return a
         except ApiError:
             pass
+    if strict:
+        raise ApiError("账号 %s 登录状态已失效，请先切换到该账号重新登录" % user)
     sess = load_session()
     if sess and sess.get("token"):
         a = Api(sess["token"])
@@ -353,6 +360,20 @@ def _api_for(user):
         except ApiError:
             pass
     raise ApiError("未登录或会话已过期，请重新接入")
+
+
+def _name_for(user):
+    """账号姓名。优先用 accounts.json 里存的名字(不依赖 token 是否有效)，
+    取不到才去问平台 —— 避免批量时 token 回退导致拿成别人的姓名。"""
+    acc = load_accounts()
+    nm = (acc.get(user) or {}).get("name") or ""
+    if nm:
+        return nm
+    try:
+        info = _api_for(user, strict=True).student_info() or {}
+        return info.get("name") or ""
+    except Exception:
+        return ""
 
 
 @app.route("/api/courses")
@@ -430,21 +451,16 @@ def _do_batch(accounts, action, mode, video_real, exam_real):
 
         def run_one(user):
             try:
-                api = _api_for(user)
+                # strict: 必须用该账号自己的 token, 失效就报错而不是借用当前会话
+                api = _api_for(user, strict=True)
                 if action == "learn":
                     lr = Learner(api, mode=mode, video_real=video_real)
                     lr.run()
                     lr.summary()
                 elif action == "export":
                     from question_bank import export_bank
-                    name = user
-                    try:
-                        info = api.student_info()
-                        realname = info.get("name")
-                        if realname:
-                            name = "%s_%s" % (user, realname)
-                    except Exception:
-                        pass
+                    nm = _name_for(user)
+                    name = ("%s_%s" % (user, nm)) if nm else user
                     export_bank(api, name=name)
                 elif action == "exam":
                     Examiner(api).run_formal(dry_run=False, exam_real=exam_real, mode=mode)
@@ -478,14 +494,8 @@ def _do_export():
         # Y 版(多账号): 文件名用 学号_姓名, 避免多账号导出互相覆盖
         name = None
         if not BIND_DEVICE:
-            name = user
-            try:
-                info = _api_for(user).student_info()
-                realname = info.get("name")
-                if realname:
-                    name = "%s_%s" % (user, realname)
-            except Exception:
-                pass
+            nm = _name_for(user)
+            name = ("%s_%s" % (user, nm)) if nm else user
         export_bank(_api_for(user), name=name)
     except Exception as e:
         log("导出失败: %s" % e, "err")
