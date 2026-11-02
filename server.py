@@ -457,7 +457,9 @@ def api_courses():
 def _do_learn(only, mode="fast", video_real=False):
     try:
         api = _api_for(STATE["user"] or "")
-        lr = Learner(api, mode=mode, video_real=video_real)
+        # V 版(一机一号)不跑并发: 视频逐个处理, 不做多线程上报
+        workers = 1 if BIND_DEVICE else 6
+        lr = Learner(api, workers=workers, mode=mode, video_real=video_real)
         lr.run(only=only)
         lr.summary()
     except Exception as e:
@@ -730,7 +732,8 @@ def _do_run(mode="fast", video_real=False, exam_real=False):
         from question_bank import export_bank
         export_bank(api)
         log("=== 第 2 步: 课程学习 ===", "info")
-        lr = Learner(api, mode=mode, video_real=video_real)
+        # V 版不跑并发, 视频逐个处理
+        lr = Learner(api, workers=(1 if BIND_DEVICE else 6), mode=mode, video_real=video_real)
         lr.run()
         lr.summary()
         log("=== 第 3 步: 正式考试 ===", "info")
