@@ -257,6 +257,15 @@ label.fl{display:block;font-size:11.5px;letter-spacing:.02em;color:var(--dim);ma
         <div style="margin-top:18px" id="accBox">
           <label class="fl">已保存终端</label>
           <div class="acc" id="acclist"><div class="nm" style="padding:6px">暂无记录</div></div>
+          <div id="multiBox" style="margin-top:10px" hidden>
+            <label class="sw" style="display:flex;align-items:center;gap:6px;cursor:pointer">
+              <input type="checkbox" id="chkMulti"> 多账号批量（勾选下方终端）
+            </label>
+            <div id="multiOps" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px" hidden>
+              <button class="btn y" id="btnBatchLearn">批量学习</button>
+              <button class="btn" id="btnBatchExport">批量导出</button>
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -355,6 +364,7 @@ async function pollLogs(){
 
 /* 状态 */
 let LAST_BUSY=false, LAST_USER=null, SIGNED=null;
+let MULTI=false, BIND=false, MULTI_SEL=new Set();
 function renderSign(signed){
   SIGNED = signed;
   const el = $('#signBadge');
@@ -387,14 +397,17 @@ async function pollState(){
       if(d.signed === false) dis = true;   // 未签字锁定
       el.disabled = dis;
     });
-    // V版(一机一号): 显示固定学号, 隐藏已保存终端; Y版(多账号): 显示已保存终端
+    BIND = d.bind;   // 记录 V/Y 版
+    // V版(一机一号): 显示固定学号, 隐藏已保存终端; Y版(多账号): 显示已保存终端 + 多账号批量
     if(d.bind){
       $('#boundBox').hidden = false;
       $('#accBox').hidden = true;
+      $('#multiBox').hidden = true;
       $('#boundUser').textContent = USER || '—';
     } else {
       $('#boundBox').hidden = true;
       $('#accBox').hidden = false;
+      $('#multiBox').hidden = false;   // Y 版显示多账号批量
     }
     renderAccounts(d.accounts);
     // 任务刚结束，或账号刚变化 -> 刷新进度
@@ -406,13 +419,20 @@ async function pollState(){
 function renderAccounts(list){
   const box = $('#acclist');
   if(!list.length){ box.innerHTML='<div class="nm" style="padding:6px">暂无记录</div>'; return; }
+  const multi = MULTI && !BIND;
   box.innerHTML = list.map(a=>`
     <div class="row ${a.user===USER?'on':''}" data-u="${a.user}">
-      <div><div class="id">${a.user}</div><div class="nm">${esc(a.name)||'—'}</div></div>
+      ${multi ? `<input type="checkbox" class="acc-chk" data-u="${a.user}" ${MULTI_SEL.has(a.user)?'checked':''}>` : ''}
+      <div style="flex:1"><div class="id">${a.user}</div><div class="nm">${esc(a.name)||'—'}</div></div>
       <div class="st ${a.hasToken?'':'no'}">${a.hasToken?'READY':'EXPIRED'}</div>
     </div>`).join('');
   box.querySelectorAll('.row').forEach(el=>{
-    el.onclick = async ()=>{
+    el.onclick = async (e)=>{
+      if(e.target && e.target.classList && e.target.classList.contains('acc-chk')) return;
+      if(multi){
+        const chk = el.querySelector('.acc-chk');
+        if(chk){ chk.checked = !chk.checked; toggleSel(el.dataset.u, chk.checked); return; }
+      }
       const r = await fetch('/api/switch',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({user:el.dataset.u})});
       const d = await r.json();
@@ -420,6 +440,13 @@ function renderAccounts(list){
       pollState(); loadCourses();
     };
   });
+  box.querySelectorAll('.acc-chk').forEach(chk=>{
+    chk.onchange = ()=> toggleSel(chk.dataset.u, chk.checked);
+  });
+}
+
+function toggleSel(user, on){
+  if(on) MULTI_SEL.add(user); else MULTI_SEL.delete(user);
 }
 
 /* 进度 */
@@ -661,6 +688,30 @@ $('#btnRun').onclick = ()=>{
 
 /* 下载证书 */
 $('#btnCert').onclick = ()=>{ act('/api/cert'); };
+
+/* 多账号批量(Y 版) */
+$('#chkMulti').onchange = (e)=>{
+  MULTI = e.target.checked;
+  $('#multiOps').hidden = !MULTI;
+  if(!MULTI) MULTI_SEL.clear();
+  pollState();   // 重绘账号列表(带/不带 checkbox)
+};
+async function batchRun(action){
+  const accounts = Array.from(MULTI_SEL);
+  if(!accounts.length){ alert('请先勾选要执行的终端'); return; }
+  const label = action === 'learn' ? '学习' : '导出';
+  if(!confirm('批量' + label + ' ' + accounts.length + ' 个账号?\n' + accounts.join('\n'))) return;
+  const r = await fetch('/api/batch',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({accounts:accounts, action:action,
+      mode:$('#modeReal').checked?'real':'fast',
+      video_real:$('#chkVideoReal').checked,
+      exam_real:$('#chkExamReal').checked})});
+  const d = await r.json();
+  if(!d.ok){ alert(d.msg); return; }
+  pollState();
+}
+$('#btnBatchLearn').onclick = ()=> batchRun('learn');
+$('#btnBatchExport').onclick = ()=> batchRun('export');
 
 /* 退出程序 */
 $('#btnExit').onclick = async ()=>{

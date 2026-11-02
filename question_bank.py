@@ -32,9 +32,13 @@ GAP = 0.15          # 请求间隔
 # ----------------------------------------------------------------------------
 # 导出
 # ----------------------------------------------------------------------------
-def export_bank(api, force=False):
-    if os.path.exists(BANK_JSON) and not force:
-        log(C.warn("题库已存在 (%s), 如需重新拉取请加 --force" % BANK_JSON))
+def export_bank(api, force=False, name=None):
+    """导出题库。name: 可选文件名后缀(如 学号_姓名), 避免多账号导出互相覆盖"""
+    suffix = ("_" + name) if name else ""
+    out_json = os.path.join(BASE_DIR, "question_bank%s.json" % suffix)
+    out_csv = os.path.join(BASE_DIR, "question_bank%s.csv" % suffix)
+    if os.path.exists(out_json) and not force:
+        log(C.warn("题库已存在 (%s), 如需重新拉取请加 --force" % out_json))
         return load_bank()
 
     types = api.get("/jcedutec/questionType/queryCountList") or []
@@ -73,16 +77,16 @@ def export_bank(api, force=False):
             time.sleep(GAP)
         log(C.dim("  · %-6s %d/%d" % (tname, got, n)))
 
-    with open(BANK_JSON, "w", encoding="utf-8") as f:
+    with open(out_json, "w", encoding="utf-8") as f:
         json.dump(all_items, f, ensure_ascii=False, indent=1)
-    with open(BANK_CSV, "w", encoding="utf-8-sig", newline="") as f:
+    with open(out_csv, "w", encoding="utf-8-sig", newline="") as f:
         w = csv.writer(f)
         w.writerow(["序号", "分类", "题型", "题干", "A", "B", "C", "D", "正确答案", "难度"])
         for i, q in enumerate(all_items, 1):
             w.writerow([i, q["type"], q["kindName"], q["stem"],
                         q["A"] or "", q["B"] or "", q["C"] or "", q["D"] or "",
                         q["answer"], q["degree"]])
-    log(C.ok("已导出 %d 题 -> question_bank.json / question_bank.csv" % len(all_items)))
+    log(C.ok("已导出 %d 题 -> %s / %s" % (len(all_items), os.path.basename(out_json), os.path.basename(out_csv))))
     return all_items
 
 

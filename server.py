@@ -357,12 +357,90 @@ def api_learn():
 
 
 # ---------------------------------------------------------------------------
+# Y 版多账号批量执行(V 版不可用)
+# ---------------------------------------------------------------------------
+@app.route("/api/batch", methods=["POST"])
+def api_batch():
+    if BIND_DEVICE:
+        return jsonify({"ok": False, "msg": "V 版不支持多账号批量"}), 403
+    if STATE["busy"]:
+        return jsonify({"ok": False, "msg": "有任务正在执行"}), 409
+    d = request.json or {}
+    accounts = d.get("accounts") or []
+    action = d.get("action") or "learn"
+    if not accounts:
+        return jsonify({"ok": False, "msg": "未选择账号"}), 400
+    mode = d.get("mode") or "fast"
+    video_real = bool(d.get("video_real"))
+    exam_real = bool(d.get("exam_real"))
+    STATE.update(busy=True, task="批量" + action)
+    threading.Thread(target=_do_batch, args=(accounts, action, mode, video_real, exam_real), daemon=True).start()
+    return jsonify({"ok": True})
+
+
+def _do_batch(accounts, action, mode, video_real, exam_real):
+    try:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        def run_one(user):
+            try:
+                api = _api_for(user)
+                if action == "learn":
+                    lr = Learner(api, mode=mode, video_real=video_real)
+                    lr.run()
+                    lr.summary()
+                elif action == "export":
+                    from question_bank import export_bank
+                    name = user
+                    try:
+                        info = api.student_info()
+                        realname = info.get("name")
+                        if realname:
+                            name = "%s_%s" % (user, realname)
+                    except Exception:
+                        pass
+                    export_bank(api, name=name)
+                elif action == "exam":
+                    Examiner(api).run_formal(dry_run=False, exam_real=exam_real, mode=mode)
+                log("[%s] %s 完成" % (user, action), "ok")
+                return user, True
+            except Exception as e:
+                log("[%s] %s 失败: %s" % (user, action, e), "err")
+                return user, False
+
+        with ThreadPoolExecutor(max_workers=3) as ex:
+            fs = {ex.submit(run_one, u): u for u in accounts}
+            for f in as_completed(fs):
+                try:
+                    f.result()
+                except Exception:
+                    pass
+    except Exception as e:
+        log("批量执行失败: %s" % e, "err")
+    finally:
+        STATE["busy"] = False
+        STATE["task"] = ""
+
+
+# ---------------------------------------------------------------------------
 # 题库 / 模拟
 # ---------------------------------------------------------------------------
 def _do_export():
     try:
         from question_bank import export_bank
-        export_bank(_api_for(STATE["user"] or ""))
+        user = STATE["user"] or ""
+        # Y 版(多账号): 文件名用 学号_姓名, 避免多账号导出互相覆盖
+        name = None
+        if not BIND_DEVICE:
+            name = user
+            try:
+                info = _api_for(user).student_info()
+                realname = info.get("name")
+                if realname:
+                    name = "%s_%s" % (user, realname)
+            except Exception:
+                pass
+        export_bank(_api_for(user), name=name)
     except Exception as e:
         log("导出失败: %s" % e, "err")
     finally:
