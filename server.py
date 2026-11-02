@@ -98,6 +98,14 @@ def api_ping():
 @app.route("/api/bye", methods=["POST", "GET"])
 def api_bye():
     ALIVE["bye"] = time.time()
+    # 退出前立即清理账号/会话数据(V/Y 版都不留存), 不依赖进程退出流程
+    for _f in ("session.json", "captcha.png", "accounts.json"):
+        try:
+            _p = os.path.join(_app_dir(), _f)
+            if os.path.isfile(_p):
+                os.remove(_p)
+        except Exception:
+            pass
     return "ok"
 
 
@@ -856,10 +864,8 @@ def main():
         app.run(host="127.0.0.1", port=port, threaded=True, debug=False, use_reloader=False)
     except KeyboardInterrupt:
         pass
-    # 退出清理: V版(一机一号)删 accounts; Y版(多账号)保留 accounts 供下次切换
-    _clean = ["session.json", "captcha.png"]
-    if BIND_DEVICE:
-        _clean.append("accounts.json")
+    # 退出清理: V版(一机一号)和 Y版(测试端)都删除账号/会话, 不留存任何数据
+    _clean = ["session.json", "captcha.png", "accounts.json"]
     for _f in _clean:
         try:
             _p = os.path.join(_app_dir(), _f)
