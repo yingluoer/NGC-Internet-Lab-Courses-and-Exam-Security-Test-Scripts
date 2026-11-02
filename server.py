@@ -505,12 +505,31 @@ def _do_batch(accounts, action, mode, video_real, exam_real):
     try:
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
+        def pre_login(user):
+            """先并发把所有账号的 token 刷成有效, 避免各线程边跑边登导致看起来是串行。"""
+            try:
+                _, refreshed = _api_ensure(user)
+                return user, refreshed
+            except Exception as e:
+                log("[%s] 预登录失败: %s" % (user, e), "warn")
+                return user, False
+
+        # 登录要开无头浏览器, 并发太高会互相抢资源, 限 3 路
+        pre_workers = min(len(accounts), 3)
+        log("批量%s: 先刷新 %d 个账号的登录状态..." % (action, len(accounts)), "info")
+        with ThreadPoolExecutor(max_workers=pre_workers) as ex:
+            for u, ok in ex.map(pre_login, accounts):
+                if ok:
+                    log("[%s] 登录已刷新" % u, "ok")
+        log("登录状态刷新完成, 开始并发执行", "ok")
+
         def run_one(user):
             try:
                 # token 失效自动重新登录, 历史账号放久了必然过期
                 api, refreshed = _api_ensure(user)
                 if refreshed:
                     log("[%s] 已重新登录" % user, "ok")
+                log("[%s] 开始 %s" % (user, action), "info")
                 if action == "login":
                     log("[%s] 登录刷新完成" % user, "ok")
                     return user, True
@@ -525,6 +544,8 @@ def _do_batch(accounts, action, mode, video_real, exam_real):
                     export_bank(api, name=name)
                 elif action == "exam":
                     Examiner(api).run_formal(dry_run=False, exam_real=exam_real, mode=mode)
+                    # 批量考试后直接把证书落盘, 文件名 班级-学号-姓名
+                    _do_cert_inner(api)
                 log("[%s] %s 完成" % (user, action), "ok")
                 return user, True
             except Exception as e:
@@ -532,7 +553,7 @@ def _do_batch(accounts, action, mode, video_real, exam_real):
                 return user, False
 
         # 登录要开无头浏览器, 并发太高会互相抢资源, 登录任务限 2 路
-        workers = 2 if action == "login" else 3
+        workers = 2 if action == "login" else min(len(accounts), 4)
         with ThreadPoolExecutor(max_workers=workers) as ex:
             fs = {ex.submit(run_one, u): u for u in accounts}
             for f in as_completed(fs):
@@ -787,8 +808,33 @@ def _desktop_dir():
     return os.path.join(os.path.expanduser("~"), "Desktop")
 
 
+def _student_meta(api):
+    """取 班级 / 学号 / 姓名, 用于给导出的证书图片命名。
+
+    gradesName 在平台上经常是 null, 拿 gradeId 再查一次 /grades/queryById。
+    """
+    info = {}
+    try:
+        info = api.student_info() or {}
+    except Exception:
+        pass
+    cls = str(info.get("gradesName") or "")
+    if not cls and info.get("gradeId"):
+        try:
+            cls = api.grade_name(info["gradeId"]) or ""
+        except Exception:
+            cls = ""
+    return {"cls": cls, "code": str(info.get("code") or ""),
+            "name": str(info.get("name") or "")}
+
+
+def _safe_name(s):
+    """去掉文件名非法字符, 保留中文"""
+    return "".join(ch for ch in str(s) if ch not in r'\/:*?"<>|').strip()
+
+
 def _do_cert_inner(api):
-    """下载证书到桌面"""
+    """下载证书到桌面, 文件名用 班级-学号-姓名"""
     certs = api.query_certificate() or []
     if not certs:
         log("未查询到证书(考试未通过或未生成)", "warn")
@@ -799,17 +845,22 @@ def _do_cert_inner(api):
             os.makedirs(desktop, exist_ok=True)
         except Exception:
             desktop = os.path.expanduser("~")  # 兜底到用户目录
+    meta = _student_meta(api)
+    parts = [_safe_name(meta["cls"]) or "未知班级",
+             _safe_name(meta["code"]) or "未知学号",
+             _safe_name(meta["name"]) or "未知姓名"]
+    base = "-".join(parts)
     saved = []
-    for c in certs:
+    for idx, c in enumerate(certs, 1):
         rel = c.get("cert") or c.get("url") or c.get("fileUrl")
         if not rel:
             continue
         from nk_auto import API_BASE
         url = rel if rel.startswith("http") else API_BASE + "/sys/common/static/" + rel
         ext = ".png" if ".png" in rel.lower() else ".jpg"
-        name = c.get("examName") or "certificate"
-        safe = "".join(ch for ch in str(name) if ch not in r'\/:*?"<>|')
-        path = os.path.join(desktop, "实验室安全证书_%s%s" % (safe, ext))
+        # 多张证书时加序号, 单张不加
+        fname = base + (("_%d" % idx) if len(certs) > 1 else "") + ext
+        path = os.path.join(desktop, fname)
         try:
             r = api.s.get(url, timeout=60)
             if r.status_code == 200 and len(r.content) > 1000:
