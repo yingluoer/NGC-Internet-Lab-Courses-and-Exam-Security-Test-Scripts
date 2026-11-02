@@ -297,7 +297,26 @@ def api_switch():
     STATE["user"] = user
     STATE["signed"] = None   # 切换账号后重置签字状态, 避免残留上个账号的状态
     log("已切换到 %s" % user, "ok")
+    # 历史账号 token 大多已过期: 切过去先验一下, 失效就后台自动重登
+    threading.Thread(target=_switch_refresh, args=(user,), daemon=True).start()
     return jsonify({"ok": True})
+
+
+def _switch_refresh(user):
+    """切换账号后静默刷新 token(失败不打扰, 用户操作时还会再试一次)。"""
+    try:
+        _api_for(user, strict=True)
+    except ApiError:
+        try:
+            _login_user(user)
+            log("已自动重新登录: %s" % user, "ok")
+            if STATE.get("user") == user:
+                try:
+                    STATE["signed"] = Api(load_accounts()[user]["token"]).is_signed()
+                except Exception:
+                    STATE["signed"] = None
+        except Exception as e:
+            log("账号 %s 自动登录失败: %s (改过密码的账号需手动登录)" % (user, e), "err")
 
 
 # ---------------------------------------------------------------------------
@@ -317,15 +336,14 @@ def api_relogin():
 
 def _do_relogin(user):
     try:
-        from nk_auto import browser_login
-        token, info = browser_login(user, headed=False, retries=8)
-        if token:
-            save_session(token, info or {})
-            log("重新登录成功: %s" % user, "ok")
-        else:
-            log("重新登录失败: 请检查账号密码或验证码", "err")
+        _login_user(user)          # 同时刷新 accounts.json 和 session.json
+        log("重新登录成功: %s" % user, "ok")
+        try:
+            STATE["signed"] = Api(load_accounts()[user]["token"]).is_signed()
+        except Exception:
+            STATE["signed"] = None
     except Exception as e:
-        log("重新登录失败: %s" % e, "err")
+        log("重新登录失败: %s (改过密码的账号需在浏览器里手动登录)" % e, "err")
     finally:
         STATE["busy"] = False
         STATE["task"] = ""
@@ -374,6 +392,44 @@ def _name_for(user):
         return info.get("name") or ""
     except Exception:
         return ""
+
+
+def _login_user(user):
+    """重新登录指定账号并把新 token 写回 accounts.json。
+
+    平台的 token 有有效期, 历史账号放久了必然 401, 所以跑批前要能自己刷新。
+    密码用学校默认值(学号), 改过密码的账号会失败, 需手动在浏览器里登。
+    """
+    from nk_auto import browser_login
+    token, info = browser_login(user, headed=False, retries=6)
+    if not token:
+        raise ApiError("账号 %s 重新登录失败" % user)
+    info = info or {}
+    acc = load_accounts()
+    rec = acc.get(user) or {}
+    rec["token"] = token
+    rec["time"] = int(time.time())
+    if info.get("realname"):
+        rec["name"] = info["realname"]
+    acc[user] = rec
+    save_accounts(acc)
+    # 只有当前选中的账号才覆盖 session.json, 否则会把当前会话顶掉
+    if STATE.get("user") == user:
+        save_session(token, {"username": user, "realname": rec.get("name", "")})
+    return Api(token)
+
+
+def _api_ensure(user):
+    """取账号 Api; token 失效就自动重新登录一次再返回。
+
+    批量跑批和切换历史账号都走这里 —— 历史账号 token 过期是常态,
+    不能直接报错让人一个个手动登。
+    """
+    try:
+        return _api_for(user, strict=True), False
+    except ApiError:
+        log("[%s] 登录已过期, 正在重新登录..." % user, "warn")
+        return _login_user(user), True
 
 
 @app.route("/api/courses")
@@ -440,7 +496,7 @@ def api_batch():
     mode = d.get("mode") or "fast"
     video_real = bool(d.get("video_real"))
     exam_real = bool(d.get("exam_real"))
-    STATE.update(busy=True, task="批量" + action)
+    STATE.update(busy=True, task=("批量登录" if action == "login" else "批量" + action))
     threading.Thread(target=_do_batch, args=(accounts, action, mode, video_real, exam_real), daemon=True).start()
     return jsonify({"ok": True})
 
@@ -451,8 +507,13 @@ def _do_batch(accounts, action, mode, video_real, exam_real):
 
         def run_one(user):
             try:
-                # strict: 必须用该账号自己的 token, 失效就报错而不是借用当前会话
-                api = _api_for(user, strict=True)
+                # token 失效自动重新登录, 历史账号放久了必然过期
+                api, refreshed = _api_ensure(user)
+                if refreshed:
+                    log("[%s] 已重新登录" % user, "ok")
+                if action == "login":
+                    log("[%s] 登录刷新完成" % user, "ok")
+                    return user, True
                 if action == "learn":
                     lr = Learner(api, mode=mode, video_real=video_real)
                     lr.run()
@@ -470,7 +531,9 @@ def _do_batch(accounts, action, mode, video_real, exam_real):
                 log("[%s] %s 失败: %s" % (user, action, e), "err")
                 return user, False
 
-        with ThreadPoolExecutor(max_workers=3) as ex:
+        # 登录要开无头浏览器, 并发太高会互相抢资源, 登录任务限 2 路
+        workers = 2 if action == "login" else 3
+        with ThreadPoolExecutor(max_workers=workers) as ex:
             fs = {ex.submit(run_one, u): u for u in accounts}
             for f in as_completed(fs):
                 try:
