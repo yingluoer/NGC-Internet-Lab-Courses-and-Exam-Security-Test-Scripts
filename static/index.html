@@ -406,7 +406,7 @@ async function pollState(){
       $('#boundBox').hidden = true;
       $('#accBox').hidden = false;
       $('#multiBox').hidden = false;     // Y 版显示批量模式
-      $('#btnRelogin').hidden = true;    // Y 版隐藏重新登录
+      $('#btnRelogin').hidden = false;   // Y 版也显示: 批量模式下=批量刷新登录
     }
     renderAccounts(d.accounts);
     // 任务刚结束，或账号刚变化 -> 刷新进度
@@ -506,7 +506,7 @@ function markUsed(id){
 async function act(url, body){
   // 批量模式(Y 版): 勾选了账号就把动作分发到 /api/batch 同时执行
   if(MULTI && !BIND && MULTI_SEL.size > 0){
-    const actionMap = {'/api/learn':'learn', '/api/export':'export', '/api/exam':'exam'};
+    const actionMap = {'/api/learn':'learn', '/api/export':'export', '/api/exam':'exam', '/api/relogin':'login'};
     const action = actionMap[url];
     if(action){
       const r = await fetch('/api/batch',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -704,6 +704,12 @@ $('#btnCert').onclick = ()=>{ act('/api/cert'); };
 
 /* 重新登录(V 版: 掉登录/签名后 token 失效时重登) */
 $('#btnRelogin').onclick = ()=>{
+  // 批量模式勾选了账号: 批量刷新这些账号的登录
+  if(MULTI && MULTI_SEL.size > 0){
+    if(!confirm('批量重新登录 ' + MULTI_SEL.size + ' 个账号?\n逐个自动登录(识别验证码), 较慢')) return;
+    act('/api/relogin');
+    return;
+  }
   if(!USER){ alert('请先登录'); return; }
   if(!confirm('重新登录 ' + USER + ' ?\n会重新走一次登录(自动识别验证码)')) return;
   act('/api/relogin');
