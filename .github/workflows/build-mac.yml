@@ -77,16 +77,17 @@ jobs:
           # 打包成 .app bundle: 双击即可运行, 不用终端敲 chmod
           # console=True: 双击后同时弹终端和浏览器, 出错时日志可见(不然崩了没有任何提示)
           spec += "exe = EXE(pyz, a.scripts, a.binaries, a.zipfiles, a.datas, [], name='Ngc-mac-bin', debug=False, strip=False, upx=False, console=True)\n"
-          spec += "app = BUNDLE(exe, name='南京工程学院互联网+实验室课程及考试安全测试程序.app', icon=None,\n"
+          # bundle 文件名必须 ASCII: 中文 zip 名跨平台解压会乱码, 乱码路径直接导致 app 打不开
+          # 界面内的中文名走 CFBundleDisplayName, 不受影响
+          spec += "app = BUNDLE(exe, name='NgcLabSafety.app', icon=None,\n"
           spec += "    bundle_identifier='com.yingluo.ngc.labsafety',\n"
           spec += "    info_plist={\n"
-          spec += "        'CFBundleName': '南京工程学院互联网+实验室课程及考试安全测试程序',\n"
+          spec += "        'CFBundleName': 'NgcLabSafety',\n"
           spec += "        'CFBundleDisplayName': '南京工程学院互联网+实验室课程及考试安全测试程序',\n"
-          spec += "        'CFBundleShortVersionString': '2.4.11',\n"
-          spec += "        'CFBundleVersion': '2.4.11',\n"
+          spec += "        'CFBundleShortVersionString': '2.4.12',\n"
+          spec += "        'CFBundleVersion': '2.4.12',\n"
           spec += "        'NSHighResolutionCapable': True,\n"
           spec += "        'LSMinimumSystemVersion': '10.15',\n"
-          spec += "        'NSRequiresAquaSystemAppearance': False,\n"
           spec += "    })\n"
           open('SafetyTerminal_mac.spec', 'w', encoding='utf-8').write(spec)
           print('mac spec 已生成')
@@ -100,6 +101,9 @@ jobs:
 
           echo "=== dist 目录 ==="
           ls -la dist/
+          echo "=== ad-hoc 重签（保证 bundle 签名一致, 减少打不开的情况）==="
+          codesign --force --deep -s - dist/NgcLabSafety.app 2>&1 || echo "codesign 失败(继续)"
+          codesign --verify --deep --verbose=2 dist/NgcLabSafety.app 2>&1 || true
           echo "=== 压缩 .app（ditto 保留可执行位与资源分支）==="
           APP_DIR=$(ls -d dist/*.app | head -1)
           echo "APP_DIR=$APP_DIR"
