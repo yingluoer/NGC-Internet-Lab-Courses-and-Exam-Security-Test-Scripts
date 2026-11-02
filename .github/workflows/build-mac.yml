@@ -74,8 +74,20 @@ jobs:
           spec += "    hiddenimports=['nk_auto','question_bank','feature_flags','flask','Crypto.Cipher.AES','Crypto.Util.Padding','ddddocr','onnxruntime','playwright','PIL'],\n"
           spec += "    excludes=['pytest','unittest','doctest'],\n)\n"
           spec += "pyz = PYZ(a.pure, a.zipped_data)\n"
-          # .command 后缀: mac 上双击即可在终端运行(纯二进制没有后缀,下载后不知道点哪)
-          spec += "exe = EXE(pyz, a.scripts, a.binaries, a.zipfiles, a.datas, [], name='Ngc互联网+实验室课程考试单刷-mac.command', debug=False, strip=False, upx=False, console=True)\n"
+          # 打包成 .app bundle: 双击即可运行, 不用终端敲 chmod
+          # console=True: 双击后同时弹终端和浏览器, 出错时日志可见(不然崩了没有任何提示)
+          spec += "exe = EXE(pyz, a.scripts, a.binaries, a.zipfiles, a.datas, [], name='Ngc-mac-bin', debug=False, strip=False, upx=False, console=True)\n"
+          spec += "app = BUNDLE(exe, name='南京工程学院互联网+实验室课程及考试安全测试程序.app', icon=None,\n"
+          spec += "    bundle_identifier='com.yingluo.ngc.labsafety',\n"
+          spec += "    info_plist={\n"
+          spec += "        'CFBundleName': '南京工程学院互联网+实验室课程及考试安全测试程序',\n"
+          spec += "        'CFBundleDisplayName': '南京工程学院互联网+实验室课程及考试安全测试程序',\n"
+          spec += "        'CFBundleShortVersionString': '2.4.11',\n"
+          spec += "        'CFBundleVersion': '2.4.11',\n"
+          spec += "        'NSHighResolutionCapable': True,\n"
+          spec += "        'LSMinimumSystemVersion': '10.15',\n"
+          spec += "        'NSRequiresAquaSystemAppearance': False,\n"
+          spec += "    })\n"
           open('SafetyTerminal_mac.spec', 'w', encoding='utf-8').write(spec)
           print('mac spec 已生成')
           PYEOF
@@ -85,12 +97,19 @@ jobs:
           echo "=== PyInstaller 打包 ==="
           set -o pipefail
           python -m PyInstaller --clean --noconfirm SafetyTerminal_mac.spec 2>&1 | tail -60
+
           echo "=== dist 目录 ==="
           ls -la dist/
-          find dist -type f 2>/dev/null || true
+          echo "=== 压缩 .app（ditto 保留可执行位与资源分支）==="
+          APP_DIR=$(ls -d dist/*.app | head -1)
+          echo "APP_DIR=$APP_DIR"
+          ditto -c -k --sequesterRsrc --keepParent "$APP_DIR" "dist/Ngc-mac.app.zip"
+          ls -la dist/*.zip
+          echo "=== 校验 ==="
+          unzip -l "dist/Ngc-mac.app.zip" | head -12
 
       - name: 上传产物
         uses: actions/upload-artifact@v4
         with:
-          name: Ngc-mac
-          path: dist/**
+          name: Ngc-mac-app
+          path: dist/Ngc-mac.app.zip
