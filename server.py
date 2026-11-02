@@ -125,7 +125,7 @@ def api_sign_open():
 def _do_open_sign(user):
     try:
         from playwright.sync_api import sync_playwright
-        from nk_auto import _launch, _login_ctx, _ocr
+        from nk_auto import _launch, _login_ctx, _ocr, save_session
         ocr = _ocr()
         with sync_playwright() as p:
             browser = _launch(p, headed=True)          # 有头浏览器, 用户能看到
@@ -135,6 +135,13 @@ def _do_open_sign(user):
                 log("签字页: 自动登录失败, 请在浏览器里手动登录", "err")
                 STATE["busy"] = False
                 return
+            # 关键: 保存签字页的新 token, 让原程序与签字页共用同一会话,
+            # 避免"两端同时登录"导致原程序 token 失效、无法继续登录
+            try:
+                save_session(token, info or {})
+                log("签字页登录 token 已同步到程序", "dim")
+            except Exception:
+                pass
             page = ctx.pages[0] if ctx.pages else ctx.new_page()
             page.goto(WEB_BASE + "/students/signature",
                       wait_until="networkidle", timeout=60000)
@@ -283,6 +290,37 @@ def api_switch():
     STATE["signed"] = None   # 切换账号后重置签字状态, 避免残留上个账号的状态
     log("已切换到 %s" % user, "ok")
     return jsonify({"ok": True})
+
+
+# ---------------------------------------------------------------------------
+# 重新登录(V 版: 掉登录/签名后 token 失效时重登)
+# ---------------------------------------------------------------------------
+@app.route("/api/relogin", methods=["POST"])
+def api_relogin():
+    user = STATE["user"]
+    if not user:
+        return jsonify({"ok": False, "msg": "请先登录"}), 400
+    if STATE["busy"]:
+        return jsonify({"ok": False, "msg": "有任务正在执行"}), 409
+    STATE.update(busy=True, task="重新登录")
+    threading.Thread(target=_do_relogin, args=(user,), daemon=True).start()
+    return jsonify({"ok": True})
+
+
+def _do_relogin(user):
+    try:
+        from nk_auto import browser_login
+        token, info = browser_login(user, headed=False, retries=8)
+        if token:
+            save_session(token, info or {})
+            log("重新登录成功: %s" % user, "ok")
+        else:
+            log("重新登录失败: 请检查账号密码或验证码", "err")
+    except Exception as e:
+        log("重新登录失败: %s" % e, "err")
+    finally:
+        STATE["busy"] = False
+        STATE["task"] = ""
 
 
 # ---------------------------------------------------------------------------

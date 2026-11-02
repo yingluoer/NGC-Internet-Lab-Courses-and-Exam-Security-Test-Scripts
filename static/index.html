@@ -259,12 +259,8 @@ label.fl{display:block;font-size:11.5px;letter-spacing:.02em;color:var(--dim);ma
           <div class="acc" id="acclist"><div class="nm" style="padding:6px">暂无记录</div></div>
           <div id="multiBox" style="margin-top:10px" hidden>
             <label class="sw" style="display:flex;align-items:center;gap:6px;cursor:pointer">
-              <input type="checkbox" id="chkMulti"> 多账号批量（勾选下方终端）
+              <input type="checkbox" id="chkMulti"> 批量模式（勾选终端后，点右侧按钮同时执行）
             </label>
-            <div id="multiOps" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px" hidden>
-              <button class="btn y" id="btnBatchLearn">批量学习</button>
-              <button class="btn" id="btnBatchExport">批量导出</button>
-            </div>
           </div>
         </div>
       </div>
@@ -291,6 +287,7 @@ label.fl{display:block;font-size:11.5px;letter-spacing:.02em;color:var(--dim);ma
             <button class="btn y" id="btnLearn">执行学习</button>
             <button class="btn p" id="btnFormalExam" title="需先签字">正式考试</button>
             <button class="btn" id="btnSign">实名签署</button>
+            <button class="btn" id="btnRelogin" hidden>重新登录</button>
             <button class="btn" id="btnExit" style="border-color:rgba(255,111,174,.4);color:var(--pnk)">退出程序</button>
             <div class="more">
               <button class="btn" id="btnMore">更多 ▾</button>
@@ -398,16 +395,18 @@ async function pollState(){
       el.disabled = dis;
     });
     BIND = d.bind;   // 记录 V/Y 版
-    // V版(一机一号): 显示固定学号, 隐藏已保存终端; Y版(多账号): 显示已保存终端 + 多账号批量
+    // V版(一机一号): 显示固定学号 + 重新登录; Y版(多账号): 显示已保存终端 + 批量模式
     if(d.bind){
       $('#boundBox').hidden = false;
       $('#accBox').hidden = true;
       $('#multiBox').hidden = true;
+      $('#btnRelogin').hidden = false;   // V 版显示重新登录
       $('#boundUser').textContent = USER || '—';
     } else {
       $('#boundBox').hidden = true;
       $('#accBox').hidden = false;
-      $('#multiBox').hidden = false;   // Y 版显示多账号批量
+      $('#multiBox').hidden = false;     // Y 版显示批量模式
+      $('#btnRelogin').hidden = true;    // Y 版隐藏重新登录
     }
     renderAccounts(d.accounts);
     // 任务刚结束，或账号刚变化 -> 刷新进度
@@ -505,6 +504,20 @@ function markUsed(id){
 
 /* 动作 */
 async function act(url, body){
+  // 批量模式(Y 版): 勾选了账号就把动作分发到 /api/batch 同时执行
+  if(MULTI && !BIND && MULTI_SEL.size > 0){
+    const actionMap = {'/api/learn':'learn', '/api/export':'export', '/api/exam':'exam'};
+    const action = actionMap[url];
+    if(action){
+      const r = await fetch('/api/batch',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({accounts:Array.from(MULTI_SEL), action:action,
+          mode:(body||{}).mode, video_real:(body||{}).video_real, exam_real:(body||{}).exam_real})});
+      const d = await r.json();
+      if(!d.ok) alert(d.msg||'失败');
+      pollState();
+      return;
+    }
+  }
   // 操作前先同步一次进度 + 签字状态(登录除外, 还没登录没法同步)
   if(url !== '/api/login'){
     try{ await Promise.all([loadCourses(), refreshSign()]); }catch(e){}
@@ -689,29 +702,19 @@ $('#btnRun').onclick = ()=>{
 /* 下载证书 */
 $('#btnCert').onclick = ()=>{ act('/api/cert'); };
 
-/* 多账号批量(Y 版) */
+/* 重新登录(V 版: 掉登录/签名后 token 失效时重登) */
+$('#btnRelogin').onclick = ()=>{
+  if(!USER){ alert('请先登录'); return; }
+  if(!confirm('重新登录 ' + USER + ' ?\n会重新走一次登录(自动识别验证码)')) return;
+  act('/api/relogin');
+};
+
+/* 批量模式(Y 版): 勾选账号后, 点右侧操作按钮同时执行 */
 $('#chkMulti').onchange = (e)=>{
   MULTI = e.target.checked;
-  $('#multiOps').hidden = !MULTI;
   if(!MULTI) MULTI_SEL.clear();
   pollState();   // 重绘账号列表(带/不带 checkbox)
 };
-async function batchRun(action){
-  const accounts = Array.from(MULTI_SEL);
-  if(!accounts.length){ alert('请先勾选要执行的终端'); return; }
-  const label = action === 'learn' ? '学习' : '导出';
-  if(!confirm('批量' + label + ' ' + accounts.length + ' 个账号?\n' + accounts.join('\n'))) return;
-  const r = await fetch('/api/batch',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({accounts:accounts, action:action,
-      mode:$('#modeReal').checked?'real':'fast',
-      video_real:$('#chkVideoReal').checked,
-      exam_real:$('#chkExamReal').checked})});
-  const d = await r.json();
-  if(!d.ok){ alert(d.msg); return; }
-  pollState();
-}
-$('#btnBatchLearn').onclick = ()=> batchRun('learn');
-$('#btnBatchExport').onclick = ()=> batchRun('export');
 
 /* 退出程序 */
 $('#btnExit').onclick = async ()=>{
