@@ -346,6 +346,16 @@ class Api:
         """证书列表:GET /jcedutec/h5/queryCertificate -> [{examName, cert, id}]"""
         return self.get("/jcedutec/h5/queryCertificate")
 
+    def grade_name(self, grade_id):
+        """班级名称。student_info 的 gradesName 经常是 null, 得按 gradeId 再查一次"""
+        if not grade_id:
+            return ""
+        try:
+            r = self.get("/grades/queryById", id=grade_id) or {}
+            return r.get("name") or ""
+        except ApiError:
+            return ""
+
 
 # ----------------------------------------------------------------------------
 # 登录
