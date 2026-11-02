@@ -604,25 +604,34 @@ function submitPaper(){
   $('#mnext').onclick = ()=>{ $('#modal').classList.remove('on'); location.reload(); };
 }
 
-/* 打开平台的实名签署页，由本人在页面上手写签名 */
-$('#btnSign').onclick = ()=>{
+/* 打开平台的实名签署页(自动登录), 由本人在页面上手写签名 */
+$('#btnSign').onclick = async ()=>{
   if(!USER){ alert('请先登录'); return; }
-  window.open('/api/sign', '_blank');
-  // 签完回来自动查状态
-  setTimeout(refreshSign, 5000);
-  setTimeout(refreshSign, 15000);
+  // 自动登录并打开签字页(Playwright 有头浏览器)
+  const r = await fetch('/api/sign_open', {method:'POST'});
+  const d = await r.json();
+  if(!d.ok){ alert(d.msg); return; }
+  // 持续轮询签字状态, 签完自动解锁考试按钮(最多 5 分钟)
+  let tries = 0;
+  const timer = setInterval(async ()=>{
+    tries++;
+    const signed = await refreshSign();
+    if(signed === true || tries >= 100){ clearInterval(timer); }
+  }, 3000);
 };
 
 async function refreshSign(){
-  if(!USER) return;
+  if(!USER) return null;
   try{
     const r = await fetch('/api/sign_status');
     const d = await r.json();
     if(d.ok){
       renderSign(d.signed);
       if(d.signed) pollState();   // 解锁考试按钮
+      return d.signed;
     }
   }catch(e){}
+  return null;
 }
 
 /* 正式考试:未签字弹窗拦截 */
@@ -725,13 +734,29 @@ noticeMask.addEventListener('click', e=>{
     try{ localStorage.setItem('sl_notice_date', new Date().toDateString()); }catch(e){}
   }
 });
-try{
-  const today = new Date().toDateString();
-  if(localStorage.getItem('sl_notice_date') !== today){
-    noticeMask.classList.add('show');          // 每天首次开启弹出
-    localStorage.setItem('sl_notice_date', today);
+/* 公告: V 版(绑定)每天首次开启自动弹出; Y 版(无绑定)不显示公告 */
+fetch('/api/state').then(function(r){return r.json();}).then(function(s){
+  if(!s.bind){                                  // Y 版: 隐藏公告按钮 + 不弹窗
+    var nb = document.getElementById('btnNotice');
+    if(nb) nb.style.display = 'none';
+    return;
   }
-}catch(e){ noticeMask.classList.add('show'); }
+  try{
+    var today = new Date().toDateString();
+    if(localStorage.getItem('sl_notice_date') !== today){
+      noticeMask.classList.add('show');
+      localStorage.setItem('sl_notice_date', today);
+    }
+  }catch(e){ noticeMask.classList.add('show'); }
+}).catch(function(){
+  try{
+    var today = new Date().toDateString();
+    if(localStorage.getItem('sl_notice_date') !== today){
+      noticeMask.classList.add('show');
+      localStorage.setItem('sl_notice_date', today);
+    }
+  }catch(e){ noticeMask.classList.add('show'); }
+});
 
 /* 「更多」下拉菜单 */
 $('#btnMore').onclick = (e)=>{

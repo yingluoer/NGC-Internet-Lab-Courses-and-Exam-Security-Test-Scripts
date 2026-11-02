@@ -109,6 +109,44 @@ def api_sign():
     return redirect(WEB_BASE + "/students/signature")
 
 
+@app.route("/api/sign_open", methods=["POST"])
+def api_sign_open():
+    """用 Playwright 打开有头浏览器, 自动登录并跳到签字页, 由用户手写签名"""
+    user = STATE["user"]
+    if not user:
+        return jsonify({"ok": False, "msg": "请先登录"}), 400
+    if STATE["busy"]:
+        return jsonify({"ok": False, "msg": "有任务正在执行"}), 409
+    STATE.update(busy=True, task="打开签字页")
+    threading.Thread(target=_do_open_sign, args=(user,), daemon=True).start()
+    return jsonify({"ok": True})
+
+
+def _do_open_sign(user):
+    try:
+        from playwright.sync_api import sync_playwright
+        from nk_auto import _launch, _login_ctx, _ocr
+        ocr = _ocr()
+        with sync_playwright() as p:
+            browser = _launch(p, headed=True)          # 有头浏览器, 用户能看到
+            ctx = browser.new_context(viewport={"width": 1280, "height": 900})
+            token, info = _login_ctx(ctx, user, None, ocr, 8)
+            if not token:
+                log("签字页: 自动登录失败, 请在浏览器里手动登录", "err")
+                STATE["busy"] = False
+                return
+            page = ctx.pages[0] if ctx.pages else ctx.new_page()
+            page.goto(WEB_BASE + "/students/signature",
+                      wait_until="networkidle", timeout=60000)
+            log("签字页已打开(已自动登录), 请在浏览器里手写签名", "ok")
+            STATE["busy"] = False
+            # 保持浏览器打开, 等用户手写签名(最多 5 分钟)
+            page.wait_for_timeout(300000)
+    except Exception as e:
+        log("打开签字页失败: %s" % e, "err")
+        STATE["busy"] = False
+
+
 @app.route("/api/commitment")
 def api_commitment():
     return redirect(WEB_BASE + "/students/commitmentView")
@@ -242,6 +280,7 @@ def api_switch():
         return jsonify({"ok": False, "msg": "该账号尚未登录"}), 400
     save_session(rec["token"], {"username": user, "realname": rec.get("name", "")})
     STATE["user"] = user
+    STATE["signed"] = None   # 切换账号后重置签字状态, 避免残留上个账号的状态
     log("已切换到 %s" % user, "ok")
     return jsonify({"ok": True})
 
