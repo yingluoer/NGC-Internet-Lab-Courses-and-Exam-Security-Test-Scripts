@@ -744,19 +744,26 @@ pollLogs(); pollState(); loadCourses();
 <div class="notice-mask" id="noticeMask">
   <div class="notice">
     <h3>◈ 公 告 / NOTICE</h3>
-    <ol>
-      <li>本项目由璎珞开源，仅用于测试和漏洞查找，请勿用于任何非法、商业经营用途。</li>
-      <li>使用该软件造成的任何违法违规违纪，软件开发者概不负责。</li>
-      <li>如果有能力请支持一下开源。</li>
-    </ol>
+    <div style="margin-bottom:12px">
+      <h4 style="font-size:13px;color:var(--pnk);letter-spacing:.06em;margin-bottom:8px">◈ 免责声明</h4>
+      <ol style="font-size:12.5px;line-height:1.85">
+        <li>本程序为开源技术学习项目，用于课程学习进度自动化与本地题库练习。是否使用、如何使用，由使用者自行判断并承担全部后果。</li>
+        <li>程序按「现状」提供，作者不对其可用性、稳定性、兼容性及使用结果作任何明示或默示担保。</li>
+        <li>因使用或无法使用本程序造成的任何直接或间接损失（包括但不限于账号被处罚、学习记录或成绩被认定无效、纪律处分及其他法律责任），作者不承担任何责任。</li>
+        <li>请在使用前自行确认所在院校的相关规定与平台用户协议。使用者应自行确保操作对象为本人账号。</li>
+        <li>程序不采集、不上传任何个人信息。账号、会话与导出文件仅保存在本机，退出时自动清理。</li>
+        <li>作者保留随时修改、暂停或终止更新的权利，且不承担技术支持义务。下载、运行即视为已阅读并接受本声明。</li>
+      </ol>
+    </div>
     <div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
-      <h4 style="font-size:13px;color:var(--ylw);letter-spacing:.06em;margin-bottom:8px">◈ V2.4.7 更新日志</h4>
+      <h4 style="font-size:13px;color:var(--ylw);letter-spacing:.06em;margin-bottom:8px">◈ V2.4.15 更新日志</h4>
       <ul style="padding-left:18px;color:var(--txt);font-size:12.5px;line-height:1.8">
-        <li>标题：改为「南京工程学院互联网+实验室课程及考试安全测试程序」。</li>
-        <li>修复：证书下载改用系统真实桌面路径，支持 OneDrive / D 盘 / 中文桌面，不再写死 C 盘。</li>
-        <li>修复：考完试自动下载证书到桌面（之前只有「一键全流程」才下载）。</li>
-        <li>macOS：证书下载支持 iCloud 桌面。</li>
-        <li>版本号更新为 2.4.7。</li>
+        <li>新增：公告与免责声明，Y 版同样展示。</li>
+        <li>修复：证书按「班级-学号-姓名」命名（如 D机电262-234260419-康哲宁.png），多张证书自动加序号。</li>
+        <li>修复：批量考试后自动为每个账号下载证书。</li>
+        <li>优化：批量执行先并发刷新全部账号登录态，再并发跑任务，不再逐个排队。</li>
+        <li>优化：账号 token 过期自动重新登录，历史账号不用手动重登。</li>
+        <li>V 版：改为严格串行执行，不启用多线程。</li>
       </ul>
     </div>
     <div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
@@ -767,10 +774,11 @@ pollLogs(); pollState(); loadCourses();
         <li><b>实名签署</b>：打开平台《考生承诺书》+ 手写签名页，由本人手写签名。</li>
         <li><b>全真模考</b>：本地组卷模拟（50 题 / 30 分钟 / 90 分及格），练手感，不写入平台。</li>
         <li><b>一键全流程</b>：题库导出 → 执行学习 → 正式考试 → 下载证书，一条龙。</li>
-        <li><b>下载证书</b>：把考试通过后的合格证书下载到本地。</li>
+        <li><b>下载证书</b>：把考试通过后的合格证书下载到本地，文件名带班级-学号-姓名。</li>
         <li><b>秒刷 / 拟真模式</b>：秒刷最快（约 10 秒刷完全部）；拟真按真实节奏分段上报进度。</li>
         <li><b>视频拟真答题</b>：视频弹题随机错 1~5 题（更自然）；不勾则全部正确。</li>
         <li><b>考试拟真答题</b>：正式考试故意错几题（分数 90~100）；不勾则全对满分。</li>
+        <li><b>批量模式</b>（Y 版）：勾选多个账号，点任意操作按钮即同时执行；支持批量刷新登录。</li>
       </ul>
     </div>
     <div class="donate">
@@ -794,13 +802,8 @@ noticeMask.addEventListener('click', e=>{
     try{ localStorage.setItem('sl_notice_date', new Date().toDateString()); }catch(e){}
   }
 });
-/* 公告: V 版(绑定)每天首次开启自动弹出; Y 版(无绑定)不显示公告 */
-fetch('/api/state').then(function(r){return r.json();}).then(function(s){
-  if(!s.bind){                                  // Y 版: 隐藏公告按钮 + 不弹窗
-    var nb = document.getElementById('btnNotice');
-    if(nb) nb.style.display = 'none';
-    return;
-  }
+/* 公告: V/Y 版都显示, 每天首次开启自动弹出, 也可点右上角「公告」按钮打开 */
+(function(){
   try{
     var today = new Date().toDateString();
     if(localStorage.getItem('sl_notice_date') !== today){
@@ -808,15 +811,7 @@ fetch('/api/state').then(function(r){return r.json();}).then(function(s){
       localStorage.setItem('sl_notice_date', today);
     }
   }catch(e){ noticeMask.classList.add('show'); }
-}).catch(function(){
-  try{
-    var today = new Date().toDateString();
-    if(localStorage.getItem('sl_notice_date') !== today){
-      noticeMask.classList.add('show');
-      localStorage.setItem('sl_notice_date', today);
-    }
-  }catch(e){ noticeMask.classList.add('show'); }
-});
+})();
 
 /* 「更多」下拉菜单 */
 $('#btnMore').onclick = (e)=>{
